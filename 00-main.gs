@@ -151,6 +151,7 @@ function AuditoriaAdministracion() {
   }
 }
 
+
 /**
  * Orquestador principal para la auditoría de Aplicaciones Externas (OAuth, Marketplace, etc.)
  */
@@ -159,13 +160,28 @@ function AuditoriasAppsExternas() {
   
   try {
     const auth = new AuthService();
-    const auditor = new SecurityAuditorFacade(auth);
     
     // Extracción de variables comunes que podríamos necesitar
     const customerId = auth.getCustomerId();
     const authHeader = auth.getAuthHeader();
     const gcpProjectId = auth.getGcpProjectId();
     const gcpServiceAccount = auth.getGcpServiceAccountEmail();
+
+    // 0. Inicializar contexto global en RAM (Censo de usuarios con roles y Políticas)
+    // Esto es vital para las estrategias que utilizan evaluateInMemory()
+    const censoWrapper = new CensusStateWrapper();
+    censoWrapper.buildAndStoreCensus(auth, customerId);
+    const censo = censoWrapper.getCensus();
+    
+    const policyQuery = new GlobalPolicyExtractor(auth, customerId);
+    const politicas = policyQuery.fetchTree();
+    
+    const globalContext = {
+      census: censo,
+      policies: politicas
+    };
+    
+    const auditor = new SecurityAuditorFacade(auth, globalContext);
 
     // 1. Instanciamos las estrategias exclusivas de Apps Externas
     const estrategias = [
@@ -178,7 +194,7 @@ function AuditoriasAppsExternas() {
       new ServiceAccountKeyAgeStrategy(gcpProjectId, gcpServiceAccount),
       new MarketplaceInstallPolicyStrategy(customerId),
       new AdminAppInstallEventStrategy(),
-      new MarketplaceAllowlistStrategy(customerId)
+      new MarketplaceAllowlistStrategy(customerId),
     ];
 
     // 2. Agregamos las estrategias al auditor

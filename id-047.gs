@@ -1,16 +1,14 @@
 /**
  * Estrategia para auditar la confianza de las aplicaciones propiedad del dominio.
  * Evalúa si las apps internas tienen acceso confiable por defecto.
- * Utiliza Cloud Identity API (v1beta1)
- * Contiene la lógica de negocio (hardcodeada) basada en toadd.csv para ID-047
+ * Utiliza Cloud Identity API en memoria
  */
 class InternalAppsTrustStrategy extends ApiStrategy {
   constructor(customerId) {
-    // 1. Nueva arquitectura: Definimos la matriz con el ID-047 y todas sus llaves
     const configIDs = [
       { 
         id: "ID-047", 
-        valueKey: "valorPrincipal", // "Habilitado", "Deshabilitado" o JSON crudo
+        valueKey: "valorPrincipal", 
         noteKey: "comentario047",
         riskKey: "riesgo047",
         scoreKey: "score047"
@@ -18,94 +16,71 @@ class InternalAppsTrustStrategy extends ApiStrategy {
     ];
 
     super("Internal Apps Trust Audit", configIDs);
-    const filter = `customer=="customers/${customerId}" && setting.type=="api_controls.internal_apps"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
+    this.customerId = customerId || "my_customer";
     this.category = "Integración de aplicaciones";
   }
 
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
-  }
+  evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
 
-  // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
-  calcularScoreDeRiesgo(nivelRiesgo) {
-    if (!nivelRiesgo) return null;
-    const riesgoNormalizado = nivelRiesgo.toString().trim().toLowerCase();
-    
-    if (riesgoNormalizado === "alto") return 1;
-    if (riesgoNormalizado === "medio") return 2;
-    if (riesgoNormalizado === "bajo") return 3;
-    
-    return null;
-  }
-
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Internal Apps Control: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo047: "Medio",
-        score047: 2,
-        comentario047: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente la política de confianza asignada a las aplicaciones internas del dominio."
-      };
+    if (!policies) {
+      return this._buildErrorResponse("Falta el contexto global.");
     }
 
-    const policies = json.policies || [];
+    const targetPolicies = policies.filter(p => p.setting && p.setting.type === "api_controls.internal_apps");
+
     let isTrustedByDefault = false;
     let existePoliticaExplicita = false;
 
-    if (policies.length > 0) {
+    if (targetPolicies.length > 0) {
       existePoliticaExplicita = true;
-      const setting = policies[0].setting || {};
-      
-      // Buscamos la propiedad tolerando variaciones de la API beta
-      const configNode = setting.internalApps || setting;
-      
-      if (configNode.trustInternalApps === true || configNode.trust_internal_apps === true) {
-        isTrustedByDefault = true;
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(targetPolicies, "api_controls.internal_apps");
+      if (rootPolicy && rootPolicy.setting) {
+        const configNode = rootPolicy.setting.value || rootPolicy.setting;
+        const internalNode = configNode.internalApps || configNode.internal_apps || configNode;
+        
+        if (internalNode.trustInternalApps === true || internalNode.trust_internal_apps === true) {
+          isTrustedByDefault = true;
+        }
       }
     }
 
-    // --- 2. LÓGICA DE SALIDA Y APLICACIÓN DE REGLAS DE NEGOCIO ---
     let respuestaConcreta;
     let riesgo047, comentario047;
 
     if (isTrustedByDefault) {
-      // Caso 1: Las apps internas son confiables por defecto (Riesgo detectado)
-      respuestaConcreta = "Habilitado";
+      respuestaConcreta = "Confiable por Defecto";
       riesgo047 = "Alto";
-      comentario047 = "La política de controles de API se encuentra configurada para confiar de manera predeterminada en todas las aplicaciones desarrolladas internamente y propiedad del dominio, permitiéndoles el acceso a los datos sin requerir autorización granular explícita.";
+      comentario047 = "La política se encuentra configurada para confiar de manera predeterminada en TODAS las aplicaciones desarrolladas internamente y propiedad del dominio, permitiéndoles el acceso sin autorización granular.";
     } else if (!existePoliticaExplicita) {
-      // Caso 2: El JSON viene vacío, no hay política configurada
-      respuestaConcreta = "Deshabilitado";
+      respuestaConcreta = "Requiere Autorización (Predeterminado)";
       riesgo047 = "Medio";
-      comentario047 = "La consola de administración no cuenta con ninguna política explícita configurada referente a la confianza predeterminada de las aplicaciones propiedad del dominio.";
+      comentario047 = "No hay política explícita. Por defecto de Google, las aplicaciones internas podrían no ser confiables automáticamente y requerir revisión, pero se sugiere establecerlo explícitamente.";
     } else {
-      // Caso 3: La política existe pero indica que NO son confiables por defecto (Seguro)
-      // Volcamos el JSON para inspección técnica manual
-      respuestaConcreta = JSON.stringify(json);
+      respuestaConcreta = "Requiere Autorización";
       riesgo047 = "Bajo";
-      comentario047 = "Existe una directiva técnica configurada que deniega explícitamente la confianza automática a las aplicaciones internas, obligando a que cada aplicación propiedad del dominio sea autorizada y evaluada de forma individual.";
+      comentario047 = "Existe una directiva técnica configurada que deniega explícitamente la confianza automática a las aplicaciones internas, obligando a autorización individual.";
     }
 
-    // Trazabilidad técnica para la consola del auditor
-    Logger.log(`[LOG] Internal Apps Audit: Resultado final -> ${respuestaConcreta} | Riesgo: ${riesgo047}`);
-
-    // 3. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
       valorPrincipal: respuestaConcreta,
       comentario047: comentario047,
       riesgo047: riesgo047,
       score047: this.calcularScoreDeRiesgo(riesgo047)
     };
+  }
+
+  calcularScoreDeRiesgo(nivelRiesgo) {
+    if (!nivelRiesgo) return null;
+    const riesgoNormalizado = nivelRiesgo.toString().trim().toLowerCase();
+    if (riesgoNormalizado === "alto") return 1;
+    if (riesgoNormalizado === "medio") return 2;
+    if (riesgoNormalizado === "bajo") return 3;
+    return null;
+  }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo047: "Medio", score047: 2, comentario047: msg };
   }
 }

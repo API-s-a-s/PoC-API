@@ -9,8 +9,6 @@
  * Diferencia con ID-034:
  *   - ID-034 solo verifica si los Super Admins tienen Vault habilitado (check binario).
  *   - ID-042 inventaría TODAS las identidades con privilegios de Vault (cualquier rol).
- *
- * Contiene la lógica de negocio para ID-042.
  */
 class VaultAccessControlStrategy extends ApiStrategy {
   constructor(customerId) {
