@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar la configuración de Google Workspace Sync para Microsoft Outlook (GWSMO).
  * Evalúa si los usuarios pueden sincronizar datos de la cuenta en clientes de escritorio de Outlook.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-064.
  */
 class WorkspaceSyncForOutlookStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -18,19 +16,7 @@ class WorkspaceSyncForOutlookStrategy extends ApiStrategy {
     ];
 
     super("Workspace Sync for Outlook Audit", configIDs);
-    
-    // Aplicamos el filtro exacto para 'gmail.workspace_sync_for_outlook'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.workspace_sync_for_outlook"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -45,34 +31,28 @@ class WorkspaceSyncForOutlookStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Workspace Sync for Outlook Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo064: "Medio",
-        score064: 2,
-        comentario064: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente si la sincronización para Microsoft Outlook está habilitada."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.workspace_sync_for_outlook");
 
     let isSyncEnabled = false;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const syncNode = setting.gmailWorkspaceSyncForOutlook || setting.workspaceSyncForOutlook || setting;
-      
-      // Verificamos si la sincronización está activa explícitamente
-      if (syncNode.enableWorkspaceSyncForOutlook === true || 
-          syncNode.enable_workspace_sync_for_outlook === true || 
-          (syncNode.state && syncNode.state.toUpperCase() === 'ENABLED')) {
-        isSyncEnabled = true;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que no está habilitado explícitamente
+      isSyncEnabled = false;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.workspace_sync_for_outlook");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const syncNode = setting.gmailWorkspaceSyncForOutlook || setting.workspaceSyncForOutlook || setting;
+        
+        if (syncNode.enableWorkspaceSyncForOutlook === true || 
+            syncNode.enable_workspace_sync_for_outlook === true || 
+            (syncNode.state && syncNode.state.toUpperCase() === 'ENABLED')) {
+          isSyncEnabled = true;
+        }
       }
     }
 
@@ -104,5 +84,9 @@ class WorkspaceSyncForOutlookStrategy extends ApiStrategy {
       riesgo064: riesgo064,
       score064: this.calcularScoreDeRiesgo(riesgo064)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo064: "Medio", score064: 2, comentario064: msg };
   }
 }

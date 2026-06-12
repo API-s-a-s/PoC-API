@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar las Reglas de Cumplimiento de Archivos Adjuntos en Gmail.
  * Evalúa cuántas restricciones explícitas existen sobre extensiones, tipos y contenido de adjuntos.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-084.
  */
 class GmailAttachmentComplianceStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -18,19 +16,7 @@ class GmailAttachmentComplianceStrategy extends ApiStrategy {
     ];
 
     super("Gmail Attachment Compliance Audit", configIDs);
-    
-    // Aplicamos el filtro exacto de la API para 'gmail.attachment_compliance'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.attachment_compliance"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -45,32 +31,27 @@ class GmailAttachmentComplianceStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Attachment Compliance Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo084: "Medio",
-        score084: 2,
-        comentario084: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente las reglas de cumplimiento de archivos adjuntos."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.attachment_compliance");
 
     let rulesCount = 0;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const complianceNode = setting.gmailAttachmentCompliance || setting.attachmentCompliance || setting;
-      
-      // Buscamos el arreglo de reglas (extensiones, tipos MIME, etc.)
-      const rules = complianceNode.rules || complianceNode.settingRules || complianceNode.complianceRules || [];
-      rulesCount = rules.length;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que no hay reglas
+      rulesCount = 0;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.attachment_compliance");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const complianceNode = setting.gmailAttachmentCompliance || setting.attachmentCompliance || setting;
+        
+        // Buscamos el arreglo de reglas (extensiones, tipos MIME, etc.)
+        const rules = complianceNode.rules || complianceNode.settingRules || complianceNode.complianceRules || [];
+        rulesCount = rules.length;
+      }
     }
 
     // --- 3. LÓGICA DE SALIDA Y APLICACIÓN DE REGLAS DE NEGOCIO INFERIDAS ---
@@ -98,5 +79,9 @@ class GmailAttachmentComplianceStrategy extends ApiStrategy {
       riesgo084: riesgo084,
       score084: this.calcularScoreDeRiesgo(riesgo084)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo084: "Medio", score084: 2, comentario084: msg };
   }
 }

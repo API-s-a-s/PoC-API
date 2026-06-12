@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar la configuración de reenvío automático (Auto-Forwarding) de Gmail.
  * Evalúa si los usuarios tienen permitido configurar reglas para reenviar correos a cuentas externas.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-065.
  */
 class GmailAutoForwardingStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -18,19 +16,7 @@ class GmailAutoForwardingStrategy extends ApiStrategy {
     ];
 
     super("Gmail Auto-Forwarding Audit", configIDs);
-    
-    // Aplicamos el filtro exacto para 'gmail.auto_forwarding'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.auto_forwarding"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -45,34 +31,28 @@ class GmailAutoForwardingStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Gmail Auto-Forwarding Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo065: "Medio",
-        score065: 2,
-        comentario065: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente si el reenvío automático de correos está habilitado en el dominio."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.auto_forwarding");
 
     let isAutoForwardingEnabled = false;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const forwardingNode = setting.gmailAutoForwarding || setting.autoForwarding || setting;
-      
-      // Verificamos si el reenvío automático está activo explícitamente
-      if (forwardingNode.enableAutoForwarding === true || 
-          forwardingNode.enable_auto_forwarding === true || 
-          (forwardingNode.state && forwardingNode.state.toUpperCase() === 'ENABLED')) {
-        isAutoForwardingEnabled = true;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que no está habilitado explícitamente
+      isAutoForwardingEnabled = false;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.auto_forwarding");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const forwardingNode = setting.gmailAutoForwarding || setting.autoForwarding || setting;
+        
+        if (forwardingNode.enableAutoForwarding === true || 
+            forwardingNode.enable_auto_forwarding === true || 
+            (forwardingNode.state && forwardingNode.state.toUpperCase() === 'ENABLED')) {
+          isAutoForwardingEnabled = true;
+        }
       }
     }
 
@@ -104,5 +84,9 @@ class GmailAutoForwardingStrategy extends ApiStrategy {
       riesgo065: riesgo065,
       score065: this.calcularScoreDeRiesgo(riesgo065)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo065: "Medio", score065: 2, comentario065: msg };
   }
 }

@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar las directivas avanzadas de protección contra spoofing y autenticación en Gmail.
  * Evalúa si el dominio cuenta con escudos activos frente a ataques BEC y suplantación de nombres/dominios.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-072.
  */
 class GmailSpoofingAndAuthenticationStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -18,19 +16,7 @@ class GmailSpoofingAndAuthenticationStrategy extends ApiStrategy {
     ];
 
     super("Gmail Spoofing and Authentication Safety Audit", configIDs);
-    
-    // Aplicamos el filtro exacto de la API para 'gmail.spoofing_and_authentication'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.spoofing_and_authentication"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico (Score)
@@ -45,34 +31,28 @@ class GmailSpoofingAndAuthenticationStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Spoofing and Authentication Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo072: "Medio",
-        score072: 2,
-        comentario072: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide evaluar técnicamente las políticas avanzadas de protección contra spoofing y autenticación en Gmail."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.spoofing_and_authentication");
 
     let isSpoofingProtectionEnabled = false;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones en el nombre del nodo debido al estado beta de la API
-      const spoofNode = setting.gmailSpoofingAndAuthentication || setting.spoofingAndAuthentication || setting;
-      
-      // Validamos si las reglas de protección avanzada están activas
-      if (spoofNode.enableSpoofingAndAuthentication === true || 
-          spoofNode.enable_spoofing_and_authentication === true || 
-          (spoofNode.state && spoofNode.state.toUpperCase() === 'ENABLED')) {
-        isSpoofingProtectionEnabled = true;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que no está habilitado
+      isSpoofingProtectionEnabled = false;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.spoofing_and_authentication");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const spoofNode = setting.gmailSpoofingAndAuthentication || setting.spoofingAndAuthentication || setting;
+        
+        if (spoofNode.enableSpoofingAndAuthentication === true || 
+            spoofNode.enable_spoofing_and_authentication === true || 
+            (spoofNode.state && spoofNode.state.toUpperCase() === 'ENABLED')) {
+          isSpoofingProtectionEnabled = true;
+        }
       }
     }
 
@@ -104,5 +84,9 @@ class GmailSpoofingAndAuthenticationStrategy extends ApiStrategy {
       riesgo072: riesgo072,
       score072: this.calcularScoreDeRiesgo(riesgo072)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo072: "Medio", score072: 2, comentario072: msg };
   }
 }

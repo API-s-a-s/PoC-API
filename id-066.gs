@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar la evasión (bypass) del proxy de imágenes de Gmail.
  * Evalúa si las imágenes se descargan directamente exponiendo la IP del usuario.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-066 (Corregido).
  */
 class GmailImageProxyBypassStrategy extends ApiStrategy {
   constructor(customerId) {

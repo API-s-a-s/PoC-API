@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar la configuración de Enlaces e Imágenes Externas en Gmail.
  * Evalúa si las imágenes y los enlaces se muestran automáticamente o requieren confirmación.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-068.
  */
 class GmailLinksAndExternalImagesStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -18,19 +16,7 @@ class GmailLinksAndExternalImagesStrategy extends ApiStrategy {
     ];
 
     super("Gmail Links and External Images Audit", configIDs);
-    
-    // Aplicamos el filtro exacto para 'gmail.links_and_external_images'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.links_and_external_images"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -45,35 +31,29 @@ class GmailLinksAndExternalImagesStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Links & External Images Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo068: "Medio",
-        score068: 2,
-        comentario068: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente la configuración de visualización de imágenes externas y enlaces en Gmail."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.links_and_external_images");
 
     let isAutoDisplayEnabled = false;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const displayNode = setting.gmailLinksAndExternalImages || setting.linksAndExternalImages || setting;
-      
-      // Verificamos si la visualización automática está activa explícitamente
-      if (displayNode.enableLinksAndExternalImages === true || 
-          displayNode.enable_links_and_external_images === true || 
-          (displayNode.state && displayNode.state.toUpperCase() === 'ENABLED') ||
-          (displayNode.displayAction && displayNode.displayAction.toUpperCase() === 'ALWAYS_SHOW')) {
-        isAutoDisplayEnabled = true;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que no está habilitado explícitamente
+      isAutoDisplayEnabled = false;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.links_and_external_images");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const displayNode = setting.gmailLinksAndExternalImages || setting.linksAndExternalImages || setting;
+        
+        if (displayNode.enableLinksAndExternalImages === true || 
+            displayNode.enable_links_and_external_images === true || 
+            (displayNode.state && displayNode.state.toUpperCase() === 'ENABLED') ||
+            (displayNode.displayAction && displayNode.displayAction.toUpperCase() === 'ALWAYS_SHOW')) {
+          isAutoDisplayEnabled = true;
+        }
       }
     }
 
@@ -105,5 +85,9 @@ class GmailLinksAndExternalImagesStrategy extends ApiStrategy {
       riesgo068: riesgo068,
       score068: this.calcularScoreDeRiesgo(riesgo068)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo068: "Medio", score068: 2, comentario068: msg };
   }
 }

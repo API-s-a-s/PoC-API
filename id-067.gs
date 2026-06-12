@@ -18,19 +18,7 @@ class GmailPerUserOutboundGatewayStrategy extends ApiStrategy {
     ];
 
     super("Gmail Per-User Outbound Gateway Audit", configIDs);
-    
-    // Aplicamos el filtro exacto para 'gmail.per_user_outbound_gateway'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.per_user_outbound_gateway"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -45,34 +33,28 @@ class GmailPerUserOutboundGatewayStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Per-User Outbound Gateway Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo067: "Medio",
-        score067: 2,
-        comentario067: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente si el uso de pasarelas SMTP externas está habilitado."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.per_user_outbound_gateway");
 
     let isOutboundGatewayEnabled = false;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const gatewayNode = setting.gmailPerUserOutboundGateway || setting.perUserOutboundGateway || setting;
-      
-      // Verificamos si el envío por SMTP externo está activo explícitamente
-      if (gatewayNode.enablePerUserOutboundGateway === true || 
-          gatewayNode.enable_per_user_outbound_gateway === true || 
-          (gatewayNode.state && gatewayNode.state.toUpperCase() === 'ENABLED')) {
-        isOutboundGatewayEnabled = true;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que no está habilitado explícitamente
+      isOutboundGatewayEnabled = false;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.per_user_outbound_gateway");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const gatewayNode = setting.gmailPerUserOutboundGateway || setting.perUserOutboundGateway || setting;
+        
+        if (gatewayNode.enablePerUserOutboundGateway === true || 
+            gatewayNode.enable_per_user_outbound_gateway === true || 
+            (gatewayNode.state && gatewayNode.state.toUpperCase() === 'ENABLED')) {
+          isOutboundGatewayEnabled = true;
+        }
       }
     }
 
@@ -104,5 +86,9 @@ class GmailPerUserOutboundGatewayStrategy extends ApiStrategy {
       riesgo067: riesgo067,
       score067: this.calcularScoreDeRiesgo(riesgo067)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo067: "Medio", score067: 2, comentario067: msg };
   }
 }

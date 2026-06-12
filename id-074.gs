@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar la lista de IPs permitidas en el filtro de spam de Gmail.
  * Evalúa cuántas direcciones IP están configuradas para evadir los controles antispam.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-074.
  */
 class GmailSpamFilterIpAllowlistStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -18,19 +16,7 @@ class GmailSpamFilterIpAllowlistStrategy extends ApiStrategy {
     ];
 
     super("Gmail Spam Filter IP Allowlist Audit", configIDs);
-    
-    // Aplicamos el filtro exacto de la API para 'gmail.email_spam_filter_ip_allowlist'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.email_spam_filter_ip_allowlist"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -45,32 +31,27 @@ class GmailSpamFilterIpAllowlistStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Spam Filter IP Allowlist Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo074: "Medio",
-        score074: 2,
-        comentario074: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide extraer y auditar la lista de direcciones IP exentas del filtro de spam."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.email_spam_filter_ip_allowlist");
 
     let allowedIpCount = 0;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const allowlistNode = setting.gmailEmailSpamFilterIpAllowlist || setting.emailSpamFilterIpAllowlist || setting;
-      
-      // Buscamos el arreglo de IPs
-      const ips = allowlistNode.allowedIps || allowlistNode.ipAddresses || allowlistNode.ips || [];
-      allowedIpCount = ips.length;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que no hay IPs permitidas (lista vacía)
+      allowedIpCount = 0;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.email_spam_filter_ip_allowlist");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const allowlistNode = setting.gmailEmailSpamFilterIpAllowlist || setting.emailSpamFilterIpAllowlist || setting;
+        
+        // Buscamos el arreglo de IPs
+        const ips = allowlistNode.allowedIps || allowlistNode.ipAddresses || allowlistNode.ips || [];
+        allowedIpCount = ips.length;
+      }
     }
 
     // --- 3. LÓGICA DE SALIDA Y APLICACIÓN DE REGLAS DE NEGOCIO INFERIDAS ---
@@ -98,5 +79,9 @@ class GmailSpamFilterIpAllowlistStrategy extends ApiStrategy {
       riesgo074: riesgo074,
       score074: this.calcularScoreDeRiesgo(riesgo074)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo074: "Medio", score074: 2, comentario074: msg };
   }
 }

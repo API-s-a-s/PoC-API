@@ -1,8 +1,7 @@
 /**
  * Estrategia para auditar la configuración del registro SPF (Sender Policy Framework).
  * Realiza una consulta DNS pública para validar si el dominio está protegido contra suplantación.
- * Utiliza Google Public DNS API (Gratuita y sin autenticación)
- * Desarrollada con lógica de negocio y comentarios inyectados para el ID-057.
+ * Utiliza Google Public DNS API
  */
 class SpfRecordAuditStrategy extends ApiStrategy {
   /**

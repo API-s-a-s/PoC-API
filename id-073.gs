@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar la configuración de Seguridad de Archivos Adjuntos en Gmail (Control Duplicado/Alterno).
  * Evalúa si las protecciones avanzadas contra malware y ransomware en adjuntos están activas.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-073.
  */
 class GmailAttachmentSafetyId073Strategy extends ApiStrategy {
   constructor(customerId) {
@@ -18,19 +16,7 @@ class GmailAttachmentSafetyId073Strategy extends ApiStrategy {
     ];
 
     super("Gmail Attachment Safety Audit (ID-073)", configIDs);
-    
-    // Aplicamos el filtro exacto para 'gmail.email_attachment_safety'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.email_attachment_safety"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -45,34 +31,28 @@ class GmailAttachmentSafetyId073Strategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Attachment Safety Audit (ID-073): ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo073: "Medio",
-        score073: 2,
-        comentario073: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente si las protecciones avanzadas contra archivos adjuntos maliciosos están habilitadas."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.email_attachment_safety");
 
     let isAttachmentSafetyEnabled = false;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const safetyNode = setting.gmailEmailAttachmentSafety || setting.emailAttachmentSafety || setting;
-      
-      // Verificamos si la protección de adjuntos está activa explícitamente
-      if (safetyNode.enableEmailAttachmentSafety === true || 
-          safetyNode.enable_email_attachment_safety === true || 
-          (safetyNode.state && safetyNode.state.toUpperCase() === 'ENABLED')) {
-        isAttachmentSafetyEnabled = true;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que no está habilitado
+      isAttachmentSafetyEnabled = false;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.email_attachment_safety");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const safetyNode = setting.gmailEmailAttachmentSafety || setting.emailAttachmentSafety || setting;
+        
+        if (safetyNode.enableEmailAttachmentSafety === true || 
+            safetyNode.enable_email_attachment_safety === true || 
+            (safetyNode.state && safetyNode.state.toUpperCase() === 'ENABLED')) {
+          isAttachmentSafetyEnabled = true;
+        }
       }
     }
 
@@ -104,5 +84,9 @@ class GmailAttachmentSafetyId073Strategy extends ApiStrategy {
       riesgo073: riesgo073,
       score073: this.calcularScoreDeRiesgo(riesgo073)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo073: "Medio", score073: 2, comentario073: msg };
   }
 }

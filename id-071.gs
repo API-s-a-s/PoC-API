@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar la seguridad (escaneo) de enlaces e imágenes externas en Gmail.
  * Evalúa si el sistema escanea activamente URLs acortadas o incrustadas en busca de amenazas.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-071.
  */
 class GmailLinksExternalImagesSecurityStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -18,19 +16,7 @@ class GmailLinksExternalImagesSecurityStrategy extends ApiStrategy {
     ];
 
     super("Gmail Links and External Images Security Audit", configIDs);
-    
-    // Aplicamos el filtro exacto para 'gmail.links_and_external_images'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.links_and_external_images"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -45,34 +31,28 @@ class GmailLinksExternalImagesSecurityStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Links & External Images Security Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo071: "Medio",
-        score071: 2,
-        comentario071: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente si el escaneo de seguridad en URLs e imágenes está habilitado."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.links_and_external_images");
 
     let isScanningEnabled = false;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const securityNode = setting.gmailLinksAndExternalImages || setting.linksAndExternalImages || setting;
-      
-      // Verificamos explícitamente el parámetro de escaneo de imágenes/enlaces externos
-      if (securityNode.enableExternalImageScanning === true || 
-          securityNode.enable_external_image_scanning === true || 
-          (securityNode.state && securityNode.state.toUpperCase() === 'ENABLED')) {
-        isScanningEnabled = true;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que el escaneo no está habilitado
+      isScanningEnabled = false;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.links_and_external_images");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const securityNode = setting.gmailLinksAndExternalImages || setting.linksAndExternalImages || setting;
+        
+        if (securityNode.enableExternalImageScanning === true || 
+            securityNode.enable_external_image_scanning === true || 
+            (securityNode.state && securityNode.state.toUpperCase() === 'ENABLED')) {
+          isScanningEnabled = true;
+        }
       }
     }
 
@@ -104,5 +84,9 @@ class GmailLinksExternalImagesSecurityStrategy extends ApiStrategy {
       riesgo071: riesgo071,
       score071: this.calcularScoreDeRiesgo(riesgo071)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo071: "Medio", score071: 2, comentario071: msg };
   }
 }

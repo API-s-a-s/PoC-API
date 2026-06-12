@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar las listas de remitentes aprobados (Spam Override Lists) de Gmail.
  * Evalúa cuántos remitentes o dominios tienen permitido saltarse el filtro de spam.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-078.
  */
 class GmailSpamOverrideListsStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -18,19 +16,7 @@ class GmailSpamOverrideListsStrategy extends ApiStrategy {
     ];
 
     super("Gmail Spam Override Lists Audit", configIDs);
-    
-    // Aplicamos el filtro exacto de la API para 'gmail.spam_override_lists'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.spam_override_lists"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -45,32 +31,27 @@ class GmailSpamOverrideListsStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Spam Override Lists Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo078: "Medio",
-        score078: 2,
-        comentario078: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente la lista de remitentes aprobados que evaden los filtros de spam."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.spam_override_lists");
 
     let overrideCount = 0;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const overrideNode = setting.gmailSpamOverrideLists || setting.spamOverrideLists || setting;
-      
-      // Buscamos el arreglo de direcciones o dominios exentos
-      const senders = overrideNode.approvedSenders || overrideNode.addresses || overrideNode.senders || [];
-      overrideCount = senders.length;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos lista vacía
+      overrideCount = 0;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.spam_override_lists");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const overrideNode = setting.gmailSpamOverrideLists || setting.spamOverrideLists || setting;
+        
+        // Buscamos el arreglo de direcciones o dominios exentos
+        const senders = overrideNode.approvedSenders || overrideNode.addresses || overrideNode.senders || [];
+        overrideCount = senders.length;
+      }
     }
 
     // --- 3. LÓGICA DE SALIDA Y APLICACIÓN DE REGLAS DE NEGOCIO INFERIDAS ---
@@ -98,5 +79,9 @@ class GmailSpamOverrideListsStrategy extends ApiStrategy {
       riesgo078: riesgo078,
       score078: this.calcularScoreDeRiesgo(riesgo078)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo078: "Medio", score078: 2, comentario078: msg };
   }
 }

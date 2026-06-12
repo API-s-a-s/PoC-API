@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar las listas de remitentes bloqueados (Blocked Sender Lists) de Gmail.
  * Evalúa la cantidad de dominios y correos explícitamente vetados por la organización.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-082.
  */
 class GmailBlockedSenderListsStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -18,19 +16,7 @@ class GmailBlockedSenderListsStrategy extends ApiStrategy {
     ];
 
     super("Gmail Blocked Senders Audit", configIDs);
-    
-    // Aplicamos el filtro exacto de la API para 'gmail.blocked_sender_lists'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.blocked_sender_lists"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -45,32 +31,27 @@ class GmailBlockedSenderListsStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Blocked Senders Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo082: "Medio",
-        score082: 2,
-        comentario082: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente las listas de dominios y direcciones de correo electrónico bloqueadas."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.blocked_sender_lists");
 
     let blockedCount = 0;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const blockedNode = setting.gmailBlockedSenderLists || setting.blockedSenderLists || setting;
-      
-      // Buscamos el arreglo de direcciones o dominios bloqueados
-      const senders = blockedNode.blockedSenders || blockedNode.addresses || blockedNode.senders || [];
-      blockedCount = senders.length;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos lista vacía
+      blockedCount = 0;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.blocked_sender_lists");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const blockedNode = setting.gmailBlockedSenderLists || setting.blockedSenderLists || setting;
+        
+        // Buscamos el arreglo de direcciones o dominios bloqueados
+        const senders = blockedNode.blockedSenders || blockedNode.addresses || blockedNode.senders || [];
+        blockedCount = senders.length;
+      }
     }
 
     // --- 3. LÓGICA DE SALIDA Y APLICACIÓN DE REGLAS DE NEGOCIO INFERIDAS ---
@@ -98,5 +79,9 @@ class GmailBlockedSenderListsStrategy extends ApiStrategy {
       riesgo082: riesgo082,
       score082: this.calcularScoreDeRiesgo(riesgo082)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo082: "Medio", score082: 2, comentario082: msg };
   }
 }

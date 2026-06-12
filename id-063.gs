@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar la configuración del acceso IMAP en Gmail.
  * Evalúa si los usuarios tienen permitido sincronizar correos mediante protocolos heredados.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-063.
  */
 class GmailImapAccessStrategy extends ApiStrategy {
   /**
@@ -10,7 +8,7 @@ class GmailImapAccessStrategy extends ApiStrategy {
    * @param {string} customerId - ID único del cliente en Google Workspace.
    */
   constructor(customerId) {
-    // 1. Matriz de configuración requerida por la arquitectura base para vincular con Google Sheets
+
     const configIDs = [
       { 
         id: "ID-063", 
@@ -22,22 +20,7 @@ class GmailImapAccessStrategy extends ApiStrategy {
     ];
 
     super("Gmail IMAP Access Audit", configIDs);
-    
-    // Aplicamos el filtro exacto provisto por la API para el tipo de configuración 'gmail.imap_access'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.imap_access"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  /**
-   * Define la configuración de red y autenticación requerida para UrlFetchApp.
-   */
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   /**
@@ -57,33 +40,27 @@ class GmailImapAccessStrategy extends ApiStrategy {
   /**
    * Procesa la respuesta JSON cruda de la API de Google y aplica reglas de negocio inyectadas.
    */
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Gmail IMAP Access Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo063: "Medio",
-        score063: 2,
-        comentario063: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente si el acceso IMAP de Gmail está habilitado o restringido."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.imap_access");
 
     let isImapAccessEnabled = false;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Manejamos las variaciones de anidación JSON típicas de las respuestas Cloud Identity
-      const imapNode = setting.gmailImapAccess || setting.imapAccess || setting;
-      
-      // Verificamos si el estado explícito viene activado
-      if (imapNode.enableImapAccess === true || imapNode.enable_imap_access === true || 
-          (imapNode.state && imapNode.state.toUpperCase() === 'ENABLED')) {
-        isImapAccessEnabled = true;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que no está habilitado explícitamente
+      isImapAccessEnabled = false;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.imap_access");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const imapNode = setting.gmailImapAccess || setting.imapAccess || setting;
+        
+        if (imapNode.enableImapAccess === true || imapNode.enable_imap_access === true || 
+            (imapNode.state && imapNode.state.toUpperCase() === 'ENABLED')) {
+          isImapAccessEnabled = true;
+        }
       }
     }
 
@@ -115,5 +92,9 @@ class GmailImapAccessStrategy extends ApiStrategy {
       riesgo063: riesgo063,
       score063: this.calcularScoreDeRiesgo(riesgo063)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo063: "Medio", score063: 2, comentario063: msg };
   }
 }

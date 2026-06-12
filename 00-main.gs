@@ -234,14 +234,27 @@ function AuditoriasAppsExternas() {
 function AuditoriasEmail() {
   const ui = SpreadsheetApp.getUi();
   
-  try {
-    const auth = new AuthService();
-    const auditor = new SecurityAuditorFacade(auth);
-    
+  try {    
+    const auth = new AuthService();    
     // Extracción de variables comunes que podríamos necesitar
     const customerId = auth.getCustomerId();
     const domain = auth.getDomain();
-    // const authHeader = auth.getAuthHeader(); 
+
+    // 0. Inicializar contexto global en RAM (Censo de usuarios con roles y Políticas)
+    // Esto es vital para las estrategias de email que utilizan evaluateInMemory()
+    const censoWrapper = new CensusStateWrapper();
+    censoWrapper.buildAndStoreCensus(auth, customerId);
+    const censo = censoWrapper.getCensus();
+    
+    const policyQuery = new GlobalPolicyExtractor(auth, customerId);
+    const politicas = policyQuery.fetchTree();
+    
+    const globalContext = {
+      census: censo,
+      policies: politicas
+    };
+    
+    const auditor = new SecurityAuditorFacade(auth, globalContext);
 
     // 1. Instanciamos las estrategias exclusivas de Correo Electrónico
     const estrategias = [
@@ -267,9 +280,23 @@ function AuditoriasEmail() {
       new SpfRecordAuditStrategy(domain),
       new DkimRecordAuditStrategy(domain),
       new DmarcRecordAuditStrategy(domain),
-      new MtaStsRecordAuditStrategy(domain)
-
+      new MtaStsRecordAuditStrategy(domain),
+      new GmailSmimeEncryptionStrategy(customerId),
+      new GmailSmimeCertificateManagementStrategy(customerId),
+      new GmailWebOfflineStrategy(customerId),
+      new GmailSecuritySandboxStrategy(customerId),
+      new GmailInboundGatewayStrategy(customerId),
+      new GmailAggressiveSpamStrategy(customerId),
+      new GmailBypassInternalSpamStrategy(customerId),
+      new GmailRequireAuthApprovedSendersStrategy(customerId),
+      new GmailOcrAttachmentsStrategy(customerId),
+      new GmailRestrictDeliveryStrategy(customerId),
+      new GmailTlsComplianceStrategy(customerId),
+      new GmailOutboundGatewayStrategy(customerId),
+      new GmailRoutingRulesStrategy(customerId),
+      new GmailSmtpRelayStrategy(customerId)
     ];
+
 
     // 2. Agregamos las estrategias al auditor
     estrategias.forEach(estrategia => auditor.addStrategy(estrategia));

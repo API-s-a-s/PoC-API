@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar el Análisis mejorado de mensajes previos a la entrega en Gmail.
  * Evalúa si el sistema retiene correos sospechosos para un escaneo profundo antes de entregarlos.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-075.
  */
 class GmailEnhancedPreDeliveryScanningStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -18,19 +16,7 @@ class GmailEnhancedPreDeliveryScanningStrategy extends ApiStrategy {
     ];
 
     super("Gmail Enhanced Pre-Delivery Scanning Audit", configIDs);
-    
-    // Aplicamos el filtro exacto para 'gmail.enhanced_pre_delivery_message_scanning'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.enhanced_pre_delivery_message_scanning"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -45,34 +31,29 @@ class GmailEnhancedPreDeliveryScanningStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Enhanced Pre-Delivery Scanning Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo075: "Medio",
-        score075: 2,
-        comentario075: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente si el escaneo profundo previo a la entrega está habilitado."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.enhanced_pre_delivery_message_scanning");
 
     let isEnhancedScanningEnabled = false;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const scanningNode = setting.gmailEnhancedPreDeliveryMessageScanning || setting.enhancedPreDeliveryMessageScanning || setting;
-      
-      // Verificamos el booleano específico de detección mejorada
-      if (scanningNode.enableImprovedSuspiciousContentDetection === true || 
-          scanningNode.enable_improved_suspicious_content_detection === true || 
-          (scanningNode.state && scanningNode.state.toUpperCase() === 'ENABLED')) {
-        isEnhancedScanningEnabled = true;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que el escaneo mejorado está deshabilitado
+      isEnhancedScanningEnabled = false;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.enhanced_pre_delivery_message_scanning");
+      if (rootPolicy && rootPolicy.setting) {
+        const setting = rootPolicy.setting;
+        const scanningNode = setting.gmailEnhancedPreDeliveryMessageScanning || setting.enhancedPreDeliveryMessageScanning || setting;
+        
+        // Verificamos el booleano específico de detección mejorada
+        if (scanningNode.enableImprovedSuspiciousContentDetection === true || 
+            scanningNode.enable_improved_suspicious_content_detection === true || 
+            (scanningNode.state && scanningNode.state.toUpperCase() === 'ENABLED')) {
+          isEnhancedScanningEnabled = true;
+        }
       }
     }
 
@@ -104,5 +85,9 @@ class GmailEnhancedPreDeliveryScanningStrategy extends ApiStrategy {
       riesgo075: riesgo075,
       score075: this.calcularScoreDeRiesgo(riesgo075)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo075: "Medio", score075: 2, comentario075: msg };
   }
 }
