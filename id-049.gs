@@ -84,7 +84,7 @@ class DwdTokenRequestAuditStrategy extends ApiStrategy {
 
     if (dwdEventCount === 0) {
       riesgo049 = "Bajo";
-      rawOutput = "0%";
+      rawOutput = "0";
       comentario049 = `${dwdEventCount} de ${totalEventsCount} peticiones DWD: La bitácora no registra eventos de delegación de dominio.`;
     } else {
       if (hasDangerousScopes) {

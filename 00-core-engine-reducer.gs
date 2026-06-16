@@ -17,7 +17,17 @@ class CELParserEngine {
 
     // Si el query está vacío o es una regla global de cliente, aplica a todos por defecto
     if (q.trim() === "" || q.includes("customer==")) {
-      if (!q.includes("entity.")) return true;
+      if (!q.includes("entity.")) {
+          // VALIDACIÓN ESTRICTA: Si es una regla global pero el usuario NO tiene licencia de Google Workspace
+          // lo descartamos, ya que las políticas de Workspace no aplican a usuarios de solo Cloud Identity Free.
+          const hasWorkspaceLicense = user.licenses && user.licenses.some(sku => sku.includes('/product/Google-Apps/'));
+          if (!hasWorkspaceLicense) {
+             this.discardedUsersLogs.add(user.email);
+             return false;
+          }
+
+          return true;
+      }
     }
     // 1. FRAGMENTACIÓN DISYUNTIVA (Operador OR ||)
     // Se divide la regla en bloques independientes. Basta con que uno sea verdadero.
@@ -50,9 +60,11 @@ class CELParserEngine {
             conditionMatched = groupMatches.some(gId => userGroups.includes(gId));
          } else if (coreCondition.includes("entity.licenses.exists")) {
             // Eliminación según el tipo de Licencias / SKUs corporativos
-            const licenseMatches = this._extractArrayValues(coreCondition, "licenses");
+            // EXTRAEMOS LA LÓGICA DE EXTRACCIÓN A UN MÉTODO MÁS ROBUSTO
+            const licenseMatches = this._extractLicenses(coreCondition);
             const userLicenses = user.licenses || [];
             conditionMatched = licenseMatches.some(sku => userLicenses.includes(sku));
+            
             // Si falla específicamente por falta de licencia, lo registramos.
             if (!conditionMatched && !isNegated) {
                 this.discardedUsersLogs.add(user.email);
@@ -101,6 +113,25 @@ class CELParserEngine {
     const match = query.match(regex);
     if (match && match[1]) {
       return match[1].replace(/['"]/g, "").split(",").map(s => s.trim());
+    }
+    return [];
+  }
+
+  /**
+   * Extractor especializado para licencias, maneja arrays y el operador '=='
+   */
+  static _extractLicenses(query) {
+    // Si usa el formato de array: license in ['/product/...']
+    const arrayRegex = /entity\.licenses\.exists[^\\]]*\[([^\]]+)\]/;
+    const arrayMatch = query.match(arrayRegex);
+    if (arrayMatch && arrayMatch[1]) {
+       return arrayMatch[1].replace(/['"]/g, "").split(",").map(s => s.trim());
+    }
+    // Si usa el formato directo: license == '/product/...'
+    const eqRegex = /entity\.licenses\.exists[^=]*==\s*['"]([^'"]+)['"]/;
+    const eqMatch = query.match(eqRegex);
+    if (eqMatch && eqMatch[1]) {
+       return [eqMatch[1].trim()];
     }
     return [];
   }
