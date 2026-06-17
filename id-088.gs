@@ -1,8 +1,7 @@
 /**
  * Estrategia para auditar la configuración del registro MTA-STS (Cifrado TLS estricto).
  * Realiza una consulta DNS pública para validar si el dominio exige conexiones cifradas para el tránsito de correos.
- * Utiliza Google Public DNS API (Gratuita y sin autenticación)
- * Desarrollada con lógica de negocio y comentarios inyectados para el ID-088.
+ * Utiliza Google Public DNS API 
  */
 class MtaStsRecordAuditStrategy extends ApiStrategy {
   /**

@@ -8,7 +8,7 @@ class GmailImapAccessStrategy extends ApiStrategy {
    * @param {string} customerId - ID único del cliente en Google Workspace.
    */
   constructor(customerId) {
-
+    // 1. Matriz de configuración requerida por la arquitectura base para vincular con Google Sheets
     const configIDs = [
       { 
         id: "ID-063", 
@@ -44,9 +44,10 @@ class GmailImapAccessStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.imap_access");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.imap_access"));
 
     let isImapAccessEnabled = false;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que no está habilitado explícitamente
@@ -54,8 +55,11 @@ class GmailImapAccessStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.imap_access");
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-063] Política raíz efectiva encontrada: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
         const setting = rootPolicy.setting;
-        const imapNode = setting.gmailImapAccess || setting.imapAccess || setting;
+        const imapNode = setting.gmailImapAccess || setting.imapAccess || setting.value || setting;
+        Logger.log(`[DEBUG ID-063] imapNode extraído: ${JSON.stringify(imapNode)}`);
         
         if (imapNode.enableImapAccess === true || imapNode.enable_imap_access === true || 
             (imapNode.state && imapNode.state.toUpperCase() === 'ENABLED')) {
@@ -86,7 +90,7 @@ class GmailImapAccessStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: respuestaConcreta,
       comentario063: comentario063,
       riesgo063: riesgo063,

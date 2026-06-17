@@ -1,6 +1,8 @@
 /**
  * Estrategia para auditar las Reglas de Cumplimiento de Archivos Adjuntos en Gmail.
  * Evalúa cuántas restricciones explícitas existen sobre extensiones, tipos y contenido de adjuntos.
+ * Utiliza Cloud Identity API (v1beta1)
+ * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-084.
  */
 class GmailAttachmentComplianceStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -35,9 +37,10 @@ class GmailAttachmentComplianceStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.attachment_compliance");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.attachment_compliance"));
 
     let rulesCount = 0;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que no hay reglas
@@ -45,11 +48,13 @@ class GmailAttachmentComplianceStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.attachment_compliance");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const complianceNode = setting.gmailAttachmentCompliance || setting.attachmentCompliance || setting;
+        Logger.log(`[DEBUG ID-084] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-084] valueNode: ${JSON.stringify(valueNode)}`);
         
         // Buscamos el arreglo de reglas (extensiones, tipos MIME, etc.)
-        const rules = complianceNode.rules || complianceNode.settingRules || complianceNode.complianceRules || [];
+        const rules = valueNode.rules || valueNode.settingRules || valueNode.complianceRules || [];
         rulesCount = rules.length;
       }
     }
@@ -73,7 +78,7 @@ class GmailAttachmentComplianceStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: rulesCount,
       comentario084: comentario084,
       riesgo084: riesgo084,

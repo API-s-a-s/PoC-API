@@ -35,9 +35,10 @@ class GmailSpoofingAndAuthenticationStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.spoofing_and_authentication");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.spoofing_and_authentication"));
 
     let isSpoofingProtectionEnabled = false;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que no está habilitado
@@ -45,12 +46,13 @@ class GmailSpoofingAndAuthenticationStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.spoofing_and_authentication");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const spoofNode = setting.gmailSpoofingAndAuthentication || setting.spoofingAndAuthentication || setting;
+        Logger.log(`[DEBUG ID-072] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-072] valueNode: ${JSON.stringify(valueNode)}`);
         
-        if (spoofNode.enableSpoofingAndAuthentication === true || 
-            spoofNode.enable_spoofing_and_authentication === true || 
-            (spoofNode.state && spoofNode.state.toUpperCase() === 'ENABLED')) {
+        if (valueNode.enableSpoofingAndAuthentication === true || 
+            (valueNode.state && valueNode.state.toUpperCase() === 'ENABLED')) {
           isSpoofingProtectionEnabled = true;
         }
       }
@@ -78,7 +80,7 @@ class GmailSpoofingAndAuthenticationStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: respuestaConcreta,
       comentario072: comentario072,
       riesgo072: riesgo072,

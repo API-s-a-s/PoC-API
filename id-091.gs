@@ -67,7 +67,7 @@ class GmailSmtpRelayStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const relayPolicies = policies.filter(p => p.setting && (p.setting.type === "gmail.smtp_relay" || p.setting.type === "gmail.smtp_relay_service"));
+    const relayPolicies = policies.filter(p => p.setting && ((p.setting.type || "").endsWith("gmail.smtp_relay") || (p.setting.type || "").endsWith("gmail.smtp_relay_service")));
     let rulesCount = 0;
     let dataSource = "Memory";
     let rawData = null;
@@ -75,10 +75,11 @@ class GmailSmtpRelayStrategy extends ApiStrategy {
     if (relayPolicies.length > 0) {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(relayPolicies, relayPolicies[0].setting.type);
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-091] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
-        const setting = rootPolicy.setting;
-        const node = setting.gmailSmtpRelay || setting.smtpRelay || setting;
-        const rules = node.rules || node.settingRules || [];
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-091] valueNode: ${JSON.stringify(valueNode)}`);
+        const rules = valueNode.rules || valueNode.settingRules || [];
         rulesCount = rules.length;
       }
     } else {

@@ -68,7 +68,7 @@ class GmailRequireAuthApprovedSendersStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const spamPolicies = policies.filter(p => p.setting && (p.setting.type === "gmail.spam" || p.setting.type === "gmail.spam_settings"));
+    const spamPolicies = policies.filter(p => p.setting && ((p.setting.type || "").endsWith("gmail.spam") || (p.setting.type || "").endsWith("gmail.spam_settings")));
     let isAuthRequired = false;
     let dataSource = "Memory";
     let rawData = null;
@@ -76,10 +76,11 @@ class GmailRequireAuthApprovedSendersStrategy extends ApiStrategy {
     if (spamPolicies.length > 0) {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(spamPolicies, spamPolicies[0].setting.type);
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-081] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
-        const setting = rootPolicy.setting;
-        const spamNode = setting.gmailSpam || setting.spamSettings || setting.spam || setting;
-        if (spamNode.requireSenderAuthenticationForApprovedSenders === true || spamNode.require_sender_authentication === true) {
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-081] valueNode: ${JSON.stringify(valueNode)}`);
+        if (valueNode.requireSenderAuthenticationForApprovedSenders === true || valueNode.require_sender_authentication === true) {
           isAuthRequired = true;
         }
       }

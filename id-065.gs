@@ -35,9 +35,10 @@ class GmailAutoForwardingStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.auto_forwarding");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.auto_forwarding"));
 
     let isAutoForwardingEnabled = false;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que no está habilitado explícitamente
@@ -45,12 +46,13 @@ class GmailAutoForwardingStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.auto_forwarding");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const forwardingNode = setting.gmailAutoForwarding || setting.autoForwarding || setting;
+        Logger.log(`[DEBUG ID-065] Política raíz efectiva encontrada: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-065] valueNode extraído: ${JSON.stringify(valueNode)}`);
         
-        if (forwardingNode.enableAutoForwarding === true || 
-            forwardingNode.enable_auto_forwarding === true || 
-            (forwardingNode.state && forwardingNode.state.toUpperCase() === 'ENABLED')) {
+        if (valueNode.enableAutoForwarding === true || 
+            (valueNode.state && valueNode.state.toUpperCase() === 'ENABLED')) {
           isAutoForwardingEnabled = true;
         }
       }
@@ -78,7 +80,7 @@ class GmailAutoForwardingStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: respuestaConcreta,
       comentario065: comentario065,
       riesgo065: riesgo065,

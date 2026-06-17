@@ -16,19 +16,7 @@ class GmailImageProxyBypassStrategy extends ApiStrategy {
     ];
 
     super("Gmail Image Proxy Bypass Audit", configIDs);
-    
-    // Aplicamos el filtro exacto para 'gmail.email_image_proxy_bypass'
-    const filter = `customer=="customers/${customerId}" && setting.type=="gmail.email_image_proxy_bypass"`;
-    this.url = `https://cloudidentity.googleapis.com/v1beta1/policies?filter=${encodeURIComponent(filter)}`;
     this.category = "Email y DNS";
-  }
-
-  getRequestConfig() {
-    return {
-      url: this.url,
-      method: "get",
-      muteHttpExceptions: true
-    };
   }
 
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
@@ -43,34 +31,30 @@ class GmailImageProxyBypassStrategy extends ApiStrategy {
     return null;
   }
 
-  parseResponse(json) {
-    // 1. EVALUACIÓN EN CASO DE ERROR DE API
-    if (json.error) {
-      Logger.log(`[ERROR] Image Proxy Bypass Audit: ${json.error.message || JSON.stringify(json.error)}`);
-      return { 
-        name: this.name, 
-        raw: json,
-        valorPrincipal: "ERROR",
-        riesgo066: "Medio",
-        score066: 2,
-        comentario066: "Error de lectura, conectividad o permisos insuficientes en la API Cloud Identity que impide auditar técnicamente si la evasión del proxy de imágenes de Gmail está habilitada."
-      };
-    }
+    evaluateInMemory(globalContext) {
+    const { policies } = globalContext;
+    if (!policies) return this._buildErrorResponse("Falta el contexto global.");
+
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.email_image_proxy_bypass"));
 
     let isBypassEnabled = false;
+    let rawData = null;
 
-    // 2. PARSEO DE POLÍTICAS EN LA BETA DE CLOUD IDENTITY
-    if (json.policies && json.policies.length > 0) {
-      const setting = json.policies[0].setting || {};
-      
-      // Soportamos variaciones de nodo en la API beta
-      const bypassNode = setting.gmailEmailImageProxyBypass || setting.emailImageProxyBypass || setting;
-      
-      // Verificamos si el bypass está activo explícitamente
-      if (bypassNode.enableEmailImageProxyBypass === true || 
-          bypassNode.enable_email_image_proxy_bypass === true || 
-          (bypassNode.state && bypassNode.state.toUpperCase() === 'ENABLED')) {
-        isBypassEnabled = true;
+    if (gmailPolicies.length === 0) {
+      // Por defecto, asumimos que el bypass no está habilitado
+      isBypassEnabled = false;
+    } else {
+      const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.email_image_proxy_bypass");
+      if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-066] Política raíz efectiva encontrada: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-066] valueNode extraído: ${JSON.stringify(valueNode)}`);
+        
+        if (valueNode.enableEmailImageProxyBypass === true || 
+            (valueNode.state && valueNode.state.toUpperCase() === 'ENABLED')) {
+          isBypassEnabled = true;
+        }
       }
     }
 
@@ -96,11 +80,15 @@ class GmailImageProxyBypassStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: respuestaConcreta,
       comentario066: comentario066,
       riesgo066: riesgo066,
       score066: this.calcularScoreDeRiesgo(riesgo066)
     };
+    }
+
+  _buildErrorResponse(msg) {
+    return { name: this.name, valorPrincipal: "ERROR", riesgo066: "Medio", score066: 2, comentario066: msg };
   }
-}
+}  

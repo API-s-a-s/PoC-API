@@ -131,33 +131,41 @@ class ApiStrategy {
     const scoreSheet = spreadsheet.getSheetByName("Scores");
     if (!scoreSheet) return;
 
+    // Estructura fija: Columna A = ID, Columna B = Score, Columna C = Categoría
+    const COL_ID = 0;
+    const COL_SCORE = 1;
+    const COL_CATEGORY = 2;
+    const MIN_COLS = 3;
+
     const dataRange = scoreSheet.getDataRange();
     const values = dataRange.getValues();
-    const headers = values[0];
-    let colIdentity = -1;
 
-    headers.forEach((h, i) => {
-      if (h.toString().toLowerCase().trim().includes('level of risks identity')) colIdentity = i;
-    });
-
-    if (colIdentity !== -1) {
-      let found = false;
-      for (let i = 1; i < values.length; i++) {
-        if (values[i][colIdentity] && values[i][colIdentity].toString().trim() === metricaId) {
-          values[i][colIdentity + 1] = scoreValue;
-          found = true;
-          break;
-        }
-      }
-
-      if (!found) {
-        let newRow = new Array(headers.length).fill("");
-        newRow[colIdentity] = metricaId;
-        newRow[colIdentity + 1] = scoreValue;
-        values.push(newRow);
-      }
-      
-      scoreSheet.getRange(1, 1, values.length, values[0].length).setValues(values);
+    // Normalizar: asegurar que todas las filas tengan al menos 3 columnas
+    const totalCols = Math.max(values.length > 0 ? values[0].length : 0, MIN_COLS);
+    for (let i = 0; i < values.length; i++) {
+      while (values[i].length < totalCols) values[i].push("");
     }
+
+    let found = false;
+    // Sin encabezado: la hoja empieza directamente con ID-001 en la fila 1 (índice 0)
+    for (let i = 0; i < values.length; i++) {
+      const cellId = values[i][COL_ID] ? values[i][COL_ID].toString().trim() : "";
+      if (cellId === metricaId) {
+        values[i][COL_SCORE] = scoreValue;
+        if (this.category) values[i][COL_CATEGORY] = this.category;
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      let newRow = new Array(totalCols).fill("");
+      newRow[COL_ID] = metricaId;
+      newRow[COL_SCORE] = scoreValue;
+      if (this.category) newRow[COL_CATEGORY] = this.category;
+      values.push(newRow);
+    }
+
+    scoreSheet.getRange(1, 1, values.length, totalCols).setValues(values);
   }
 }

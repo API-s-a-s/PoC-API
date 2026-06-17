@@ -68,7 +68,7 @@ class GmailSecuritySandboxStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const sandboxPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.security_sandbox");
+    const sandboxPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.security_sandbox"));
     let isSandboxEnabled = false;
     let dataSource = "Memory";
     let rawData = null;
@@ -76,10 +76,11 @@ class GmailSecuritySandboxStrategy extends ApiStrategy {
     if (sandboxPolicies.length > 0) {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(sandboxPolicies, "gmail.security_sandbox");
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-076] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
-        const setting = rootPolicy.setting;
-        const sandboxNode = setting.gmailSecuritySandbox || setting.securitySandbox || setting;
-        if (sandboxNode.enableSecuritySandbox === true || sandboxNode.state === 'ENABLED') {
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-076] valueNode: ${JSON.stringify(valueNode)}`);
+        if (valueNode.enableSecuritySandbox === true || valueNode.state === 'ENABLED') {
           isSandboxEnabled = true;
         }
       }

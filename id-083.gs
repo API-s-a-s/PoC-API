@@ -1,6 +1,8 @@
 /**
  * Estrategia para auditar las Reglas de Cumplimiento de Contenido en Gmail (DLP).
  * Evalúa cuántas reglas están configuradas para inspeccionar y restringir correos por palabras clave o patrones.
+ * Utiliza Cloud Identity API (v1beta1)
+ * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-083.
  */
 class GmailContentComplianceStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -35,9 +37,10 @@ class GmailContentComplianceStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.content_compliance");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.content_compliance"));
 
     let rulesCount = 0;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que no hay reglas
@@ -45,11 +48,13 @@ class GmailContentComplianceStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.content_compliance");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const complianceNode = setting.gmailContentCompliance || setting.contentCompliance || setting;
+        Logger.log(`[DEBUG ID-083] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-083] valueNode: ${JSON.stringify(valueNode)}`);
         
         // Buscamos el arreglo de reglas (DLP, regex, palabras clave)
-        const rules = complianceNode.rules || complianceNode.complianceRules || complianceNode.settingRules || [];
+        const rules = valueNode.rules || valueNode.complianceRules || valueNode.settingRules || [];
         rulesCount = rules.length;
       }
     }
@@ -73,7 +78,7 @@ class GmailContentComplianceStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: rulesCount,
       comentario083: comentario083,
       riesgo083: riesgo083,

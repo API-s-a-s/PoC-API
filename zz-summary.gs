@@ -12,18 +12,17 @@ function generarResumenSemaforo() {
     throw new Error("La hoja 'Scores' no existe. Asegúrate de ejecutar primero tus estrategias de auditoría.");
   }
   
-  // Buscar u obtener la hoja Semaforo
-  let semaforoSheet = ss.getSheetByName("Semaforo");
+  // Buscar u obtener la hoja Preguntas generales
+  let semaforoSheet = ss.getSheetByName("Preguntas generales");
   if (!semaforoSheet) {
-    semaforoSheet = ss.insertSheet("Semaforo");
-  } else {
-    semaforoSheet.clear(); // Limpia por completo datos y formatos de ejecuciones previas
+    semaforoSheet = ss.insertSheet("Preguntas generales");
   }
+  // IMPORTANTE: NO usamos semaforoSheet.clear() para no borrar otros elementos de la hoja.
   
   // Obtener los datos reales de la hoja de Scores
   const data = scoresSheet.getDataRange().getValues();
-  if (data.length <= 1) {
-    Logger.log("[WARN] La hoja 'Scores' está vacía o solo contiene encabezados.");
+  if (data.length === 0) {
+    Logger.log("[WARN] La hoja 'Scores' está vacía.");
     return;
   }
   
@@ -32,8 +31,8 @@ function generarResumenSemaforo() {
   let sumaGlobalScores = 0;
   let totalGlobalScores = 0;
   
-  // Procesar fila por fila (saltando la cabecera en i = 0)
-  for (let i = 1; i < data.length; i++) {
+  // Procesar fila por fila (sin encabezado: la fila 1 ya contiene ID-001)
+  for (let i = 0; i < data.length; i++) {
     const scoreNum = parseFloat(data[i][1]); // Segunda Columna (B): Puntuación entera del 1 al 3
     const categoria = data[i][2];            // Tercera Columna (C): Texto de la Categoría
     
@@ -95,11 +94,14 @@ function generarResumenSemaforo() {
   matrizSalida.push(["Score global de ciberseguridad", etiquetaGlobal]);
   
   // --- PARTE DE RENDERIZADO Y DISEÑO ESTÉTICO EN GOOGLE SHEETS ---
-  const filaInicio = 2; // Margen superior estético
-  const colInicio = 2;  // Inicia en la Columna B para una visualización más limpia (estilo Dashboard)
+  const filaInicio = 12; // Inicia en la fila 12 según requerimiento
+  const colInicio = 2;  // Inicia en la Columna B (B12)
   const totalFilas = matrizSalida.length;
   const totalColumnas = 2;
   
+  // Limpiar el rango específico donde va la tabla para no dejar rastros de ejecuciones anteriores más largas
+  semaforoSheet.getRange(filaInicio, colInicio, 50, totalColumnas).clear();
+
   // Escribir la matriz de datos de golpe en el rango correspondiente
   const rangoTabla = semaforoSheet.getRange(filaInicio, colInicio, totalFilas, totalColumnas);
   rangoTabla.setValues(matrizSalida);
@@ -168,5 +170,5 @@ function generarResumenSemaforo() {
   semaforoSheet.setColumnWidth(colInicio, 280);     // Ancho columna Categoría (Col B)
   semaforoSheet.setColumnWidth(colInicio + 1, 110);  // Ancho columna Resultado (Col C)
   
-  Logger.log("[LOG] Cuadro resumen dinámico cualitativo renderizado con éxito en la hoja 'Semaforo'.");
+  Logger.log("[LOG] Cuadro resumen dinámico cualitativo renderizado con éxito en la hoja 'Preguntas generales'.");
 }

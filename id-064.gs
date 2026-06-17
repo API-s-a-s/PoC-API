@@ -35,9 +35,10 @@ class WorkspaceSyncForOutlookStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.workspace_sync_for_outlook");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.workspace_sync_for_outlook"));
 
     let isSyncEnabled = false;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que no está habilitado explícitamente
@@ -45,12 +46,13 @@ class WorkspaceSyncForOutlookStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.workspace_sync_for_outlook");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const syncNode = setting.gmailWorkspaceSyncForOutlook || setting.workspaceSyncForOutlook || setting;
+        Logger.log(`[DEBUG ID-064] Política raíz efectiva encontrada: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-064] valueNode extraído: ${JSON.stringify(valueNode)}`);
         
-        if (syncNode.enableWorkspaceSyncForOutlook === true || 
-            syncNode.enable_workspace_sync_for_outlook === true || 
-            (syncNode.state && syncNode.state.toUpperCase() === 'ENABLED')) {
+        if (valueNode.enableWorkspaceSyncForOutlook === true || 
+            (valueNode.state && valueNode.state.toUpperCase() === 'ENABLED')) {
           isSyncEnabled = true;
         }
       }
@@ -78,7 +80,7 @@ class WorkspaceSyncForOutlookStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: respuestaConcreta,
       comentario064: comentario064,
       riesgo064: riesgo064,

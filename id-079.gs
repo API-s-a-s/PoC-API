@@ -69,7 +69,7 @@ class GmailAggressiveSpamStrategy extends ApiStrategy {
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
     // Muchas configuraciones de spam se engloban en 'gmail.spam' o variantes.
-    const spamPolicies = policies.filter(p => p.setting && (p.setting.type === "gmail.spam" || p.setting.type === "gmail.aggressive_spam"));
+    const spamPolicies = policies.filter(p => p.setting && ((p.setting.type || "").endsWith("gmail.spam") || (p.setting.type || "").endsWith("gmail.aggressive_spam")));
     let isAggressiveEnabled = false;
     let dataSource = "Memory";
     let rawData = null;
@@ -77,10 +77,11 @@ class GmailAggressiveSpamStrategy extends ApiStrategy {
     if (spamPolicies.length > 0) {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(spamPolicies, spamPolicies[0].setting.type);
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-079] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
-        const setting = rootPolicy.setting;
-        const spamNode = setting.gmailSpam || setting.aggressiveSpam || setting.spam || setting;
-        if (spamNode.enableAggressiveSpamFilter === true || spamNode.aggressiveSpamFiltering === true) {
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-079] valueNode: ${JSON.stringify(valueNode)}`);
+        if (valueNode.enableAggressiveSpamFilter === true || valueNode.aggressiveSpamFiltering === true) {
           isAggressiveEnabled = true;
         }
       }

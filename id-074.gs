@@ -35,9 +35,10 @@ class GmailSpamFilterIpAllowlistStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.email_spam_filter_ip_allowlist");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.email_spam_filter_ip_allowlist"));
 
     let allowedIpCount = 0;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que no hay IPs permitidas (lista vacía)
@@ -45,11 +46,13 @@ class GmailSpamFilterIpAllowlistStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.email_spam_filter_ip_allowlist");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const allowlistNode = setting.gmailEmailSpamFilterIpAllowlist || setting.emailSpamFilterIpAllowlist || setting;
+        Logger.log(`[DEBUG ID-074] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-074] valueNode: ${JSON.stringify(valueNode)}`);
         
         // Buscamos el arreglo de IPs
-        const ips = allowlistNode.allowedIps || allowlistNode.ipAddresses || allowlistNode.ips || [];
+        const ips = valueNode.allowedIps || valueNode.ipAddresses || valueNode.ips || [];
         allowedIpCount = ips.length;
       }
     }
@@ -73,7 +76,7 @@ class GmailSpamFilterIpAllowlistStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: allowedIpCount,
       comentario074: comentario074,
       riesgo074: riesgo074,

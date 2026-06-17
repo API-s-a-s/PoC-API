@@ -68,7 +68,7 @@ class GmailRestrictDeliveryStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const restrictPolicies = policies.filter(p => p.setting && (p.setting.type === "gmail.restrict_delivery" || p.setting.type === "gmail.delivery_restriction"));
+    const restrictPolicies = policies.filter(p => p.setting && ((p.setting.type || "").endsWith("gmail.restrict_delivery") || (p.setting.type || "").endsWith("gmail.delivery_restriction")));
     let rulesCount = 0;
     let dataSource = "Memory";
     let rawData = null;
@@ -76,10 +76,11 @@ class GmailRestrictDeliveryStrategy extends ApiStrategy {
     if (restrictPolicies.length > 0) {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(restrictPolicies, restrictPolicies[0].setting.type);
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-086] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
-        const setting = rootPolicy.setting;
-        const node = setting.gmailRestrictDelivery || setting.restrictDelivery || setting;
-        const rules = node.rules || node.settingRules || [];
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-086] valueNode: ${JSON.stringify(valueNode)}`);
+        const rules = valueNode.rules || valueNode.settingRules || [];
         rulesCount = rules.length;
       }
     } else {

@@ -35,9 +35,10 @@ class GmailLinksAndExternalImagesStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.links_and_external_images");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.links_and_external_images"));
 
     let isAutoDisplayEnabled = false;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que no está habilitado explícitamente
@@ -45,13 +46,15 @@ class GmailLinksAndExternalImagesStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.links_and_external_images");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const displayNode = setting.gmailLinksAndExternalImages || setting.linksAndExternalImages || setting;
+        Logger.log(`[DEBUG ID-068] Política raíz efectiva encontrada: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-068] valueNode extraído: ${JSON.stringify(valueNode)}`);
         
-        if (displayNode.enableLinksAndExternalImages === true || 
-            displayNode.enable_links_and_external_images === true || 
-            (displayNode.state && displayNode.state.toUpperCase() === 'ENABLED') ||
-            (displayNode.displayAction && displayNode.displayAction.toUpperCase() === 'ALWAYS_SHOW')) {
+        // La API v1 devuelve campos como enableExternalImageScanning
+        // Si el escaneo está deshabilitado, asumimos que se muestran automáticamente (riesgo)
+        if (valueNode.enableExternalImageScanning === false || 
+            (valueNode.state && valueNode.state.toUpperCase() === 'ENABLED')) {
           isAutoDisplayEnabled = true;
         }
       }
@@ -79,7 +82,7 @@ class GmailLinksAndExternalImagesStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: respuestaConcreta,
       comentario068: comentario068,
       riesgo068: riesgo068,

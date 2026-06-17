@@ -31,16 +31,26 @@ class GmailSmimeCertificateManagementStrategy extends ApiStrategy {
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
     // Evaluamos el enfoque de S/MIME Certificates (generalmente atado a enhanced_smime_encryption o similar)
-    const certPolicies = policies.filter(p => p.setting && (p.setting.type === "gmail.enhanced_smime_encryption" || p.setting.type === "gmail.smime_encryption"));
+    Logger.log(`[DEBUG ID-062] Evaluando certificados S/MIME. Políticas recibidas: ${policies ? policies.length : 0}`);
+    const certPolicies = policies.filter(p => p.setting && (
+      (p.setting.type || "").endsWith("gmail.enhanced_smime_encryption") || 
+      (p.setting.type || "").endsWith("gmail.smime_encryption")
+    ));
+    Logger.log(`[DEBUG ID-062] Políticas de certificados filtradas encontradas: ${certPolicies.length}`);
     let certMgmtConfigured = false;
     let rawData = null;
 
     if (certPolicies.length > 0) {
       const rootPolicy = certPolicies[0]; // Extraemos el primero para validación genérica
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-062] Política raíz efectiva encontrada: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
-        // Si hay una política de S/MIME que no es el baseline, asumimos gestión
-        certMgmtConfigured = true;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-062] valueNode extraído: ${JSON.stringify(valueNode)}`);
+        certMgmtConfigured = valueNode.allowUserToUploadCertificates === false || valueNode.enableSmimeEncryption === 'STATUS_ENABLED';
+        Logger.log(`[DEBUG ID-062] certMgmtConfigured seteado a: ${certMgmtConfigured}`);
+      } else {
+        Logger.log(`[DEBUG ID-062] rootPolicy.setting es nulo o indefinido.`);
       }
     } 
 
@@ -52,7 +62,7 @@ class GmailSmimeCertificateManagementStrategy extends ApiStrategy {
       comentario062 = "Se detectó que el enfoque de administración de certificados S/MIME está configurado y administrado a nivel dominio/usuario. Esto evita que los usuarios manipulen certificados de forma insegura y estandariza la confianza criptográfica.";
     } else {
       // Como no hay evidencia de políticas de certificados, se considera que recae en el usuario o no está usado
-      respuestaConcreta = "No Gestionado / Deshabilitado";
+      respuestaConcreta = "Deshabilitado";
       riesgo062 = "Medio";
       comentario062 = "No se detectaron políticas avanzadas de administración de certificados S/MIME. Si S/MIME está en uso, la administración de llaves recae en los usuarios finales, lo que incrementa el riesgo de pérdida de llaves privadas o el uso de certificados revocados/no confiables.";
     }

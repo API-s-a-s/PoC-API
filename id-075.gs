@@ -35,9 +35,10 @@ class GmailEnhancedPreDeliveryScanningStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.enhanced_pre_delivery_message_scanning");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.enhanced_pre_delivery_message_scanning"));
 
     let isEnhancedScanningEnabled = false;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que el escaneo mejorado está deshabilitado
@@ -45,13 +46,14 @@ class GmailEnhancedPreDeliveryScanningStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.enhanced_pre_delivery_message_scanning");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const scanningNode = setting.gmailEnhancedPreDeliveryMessageScanning || setting.enhancedPreDeliveryMessageScanning || setting;
+        Logger.log(`[DEBUG ID-075] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-075] valueNode: ${JSON.stringify(valueNode)}`);
         
         // Verificamos el booleano específico de detección mejorada
-        if (scanningNode.enableImprovedSuspiciousContentDetection === true || 
-            scanningNode.enable_improved_suspicious_content_detection === true || 
-            (scanningNode.state && scanningNode.state.toUpperCase() === 'ENABLED')) {
+        if (valueNode.enableImprovedSuspiciousContentDetection === true || 
+            (valueNode.state && valueNode.state.toUpperCase() === 'ENABLED')) {
           isEnhancedScanningEnabled = true;
         }
       }
@@ -79,7 +81,7 @@ class GmailEnhancedPreDeliveryScanningStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: respuestaConcreta,
       comentario075: comentario075,
       riesgo075: riesgo075,

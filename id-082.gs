@@ -35,9 +35,10 @@ class GmailBlockedSenderListsStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.blocked_sender_lists");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.blocked_sender_lists"));
 
     let blockedCount = 0;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos lista vacía
@@ -45,11 +46,13 @@ class GmailBlockedSenderListsStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.blocked_sender_lists");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const blockedNode = setting.gmailBlockedSenderLists || setting.blockedSenderLists || setting;
+        Logger.log(`[DEBUG ID-082] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-082] valueNode: ${JSON.stringify(valueNode)}`);
         
         // Buscamos el arreglo de direcciones o dominios bloqueados
-        const senders = blockedNode.blockedSenders || blockedNode.addresses || blockedNode.senders || [];
+        const senders = valueNode.blockedSenders || valueNode.addresses || valueNode.senders || [];
         blockedCount = senders.length;
       }
     }
@@ -73,7 +76,7 @@ class GmailBlockedSenderListsStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: blockedCount,
       comentario082: comentario082,
       riesgo082: riesgo082,

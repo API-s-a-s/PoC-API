@@ -35,9 +35,10 @@ class GmailAttachmentSafetyStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.email_attachment_safety");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.email_attachment_safety"));
 
     let isAttachmentSafetyEnabled = false;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que no está habilitado explícitamente
@@ -45,12 +46,13 @@ class GmailAttachmentSafetyStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.email_attachment_safety");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const safetyNode = setting.gmailEmailAttachmentSafety || setting.emailAttachmentSafety || setting;
+        Logger.log(`[DEBUG ID-070] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-070] valueNode: ${JSON.stringify(valueNode)}`);
         
-        if (safetyNode.enableEmailAttachmentSafety === true || 
-            safetyNode.enable_email_attachment_safety === true || 
-            (safetyNode.state && safetyNode.state.toUpperCase() === 'ENABLED')) {
+        if (valueNode.enableEmailAttachmentSafety === true || 
+            (valueNode.state && valueNode.state.toUpperCase() === 'ENABLED')) {
           isAttachmentSafetyEnabled = true;
         }
       }
@@ -78,7 +80,7 @@ class GmailAttachmentSafetyStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: respuestaConcreta,
       comentario070: comentario070,
       riesgo070: riesgo070,

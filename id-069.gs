@@ -68,7 +68,10 @@ class GmailWebOfflineStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const offlinePolicies = policies.filter(p => p.setting && (p.setting.type === "gmail.offline_web_access" || p.setting.type === "gmail.offline"));
+    const offlinePolicies = policies.filter(p => p.setting && (
+      (p.setting.type || "").endsWith("gmail.offline_web_access") || 
+      (p.setting.type || "").endsWith("gmail.offline")
+    ));
     let isOfflineEnabled = false;
     let dataSource = "Memory";
     let rawData = null;
@@ -76,10 +79,11 @@ class GmailWebOfflineStrategy extends ApiStrategy {
     if (offlinePolicies.length > 0) {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(offlinePolicies, offlinePolicies[0].setting.type);
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-069] Política raíz efectiva encontrada: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
-        const setting = rootPolicy.setting;
-        const offlineNode = setting.gmailOfflineWebAccess || setting.offlineWebAccess || setting;
-        if (offlineNode.enableOfflineWebAccess === true || offlineNode.state === 'ENABLED') {
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-069] valueNode extraído: ${JSON.stringify(valueNode)}`);
+        if (valueNode.enableOfflineWebAccess === true || valueNode.state === 'ENABLED') {
           isOfflineEnabled = true;
         }
       }

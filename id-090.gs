@@ -67,7 +67,7 @@ class GmailRoutingRulesStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const routingPolicies = policies.filter(p => p.setting && (p.setting.type === "gmail.routing" || p.setting.type === "gmail.routing_rules"));
+    const routingPolicies = policies.filter(p => p.setting && ((p.setting.type || "").endsWith("gmail.routing") || (p.setting.type || "").endsWith("gmail.routing_rules")));
     let rulesCount = 0;
     let dataSource = "Memory";
     let rawData = null;
@@ -75,10 +75,11 @@ class GmailRoutingRulesStrategy extends ApiStrategy {
     if (routingPolicies.length > 0) {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(routingPolicies, routingPolicies[0].setting.type);
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-090] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
-        const setting = rootPolicy.setting;
-        const node = setting.gmailRouting || setting.routingRules || setting;
-        const rules = node.rules || node.settingRules || [];
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-090] valueNode: ${JSON.stringify(valueNode)}`);
+        const rules = valueNode.rules || valueNode.settingRules || [];
         rulesCount = rules.length;
       }
     } else {

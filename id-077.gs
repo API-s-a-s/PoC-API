@@ -68,7 +68,7 @@ class GmailInboundGatewayStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const inboundPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.inbound_gateway");
+    const inboundPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.inbound_gateway"));
     let isInboundGatewayEnabled = false;
     let dataSource = "Memory";
     let rawData = null;
@@ -76,10 +76,11 @@ class GmailInboundGatewayStrategy extends ApiStrategy {
     if (inboundPolicies.length > 0) {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(inboundPolicies, "gmail.inbound_gateway");
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-077] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
-        const setting = rootPolicy.setting;
-        const gatewayNode = setting.gmailInboundGateway || setting.inboundGateway || setting;
-        if (gatewayNode.gatewayIps && gatewayNode.gatewayIps.length > 0) {
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-077] valueNode: ${JSON.stringify(valueNode)}`);
+        if (valueNode.gatewayIps && valueNode.gatewayIps.length > 0) {
           isInboundGatewayEnabled = true;
         }
       }

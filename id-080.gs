@@ -68,7 +68,7 @@ class GmailBypassInternalSpamStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const spamPolicies = policies.filter(p => p.setting && (p.setting.type === "gmail.spam" || p.setting.type === "gmail.spam_settings"));
+    const spamPolicies = policies.filter(p => p.setting && ((p.setting.type || "").endsWith("gmail.spam") || (p.setting.type || "").endsWith("gmail.spam_settings")));
     let isBypassEnabled = false;
     let dataSource = "Memory";
     let rawData = null;
@@ -76,10 +76,11 @@ class GmailBypassInternalSpamStrategy extends ApiStrategy {
     if (spamPolicies.length > 0) {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(spamPolicies, spamPolicies[0].setting.type);
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-080] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
-        const setting = rootPolicy.setting;
-        const spamNode = setting.gmailSpam || setting.spamSettings || setting.spam || setting;
-        if (spamNode.bypassInternalSpam === true || spamNode.bypass_internal_spam === true) {
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-080] valueNode: ${JSON.stringify(valueNode)}`);
+        if (valueNode.bypassInternalSpam === true || valueNode.bypass_internal_spam === true) {
           isBypassEnabled = true;
         }
       }

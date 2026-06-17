@@ -69,7 +69,9 @@ class GmailSmimeEncryptionStrategy extends ApiStrategy {
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
     // Fase 1: Intentar buscar en las políticas globales en memoria
-    const smimePolicies = policies.filter(p => p.setting && p.setting.type === "gmail.smime_encryption");
+    Logger.log(`[DEBUG ID-061] Evaluando política S/MIME. Políticas recibidas: ${policies ? policies.length : 0}`);
+    const smimePolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.smime_encryption"));
+    Logger.log(`[DEBUG ID-061] Políticas S/MIME filtradas encontradas: ${smimePolicies.length}`);
     let isSmimeEnabled = false;
     let dataSource = "Memory";
     let rawData = null;
@@ -77,12 +79,19 @@ class GmailSmimeEncryptionStrategy extends ApiStrategy {
     if (smimePolicies.length > 0) {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(smimePolicies, "gmail.smime_encryption");
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-061] Política raíz efectiva encontrada: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
         const setting = rootPolicy.setting;
-        const smimeNode = setting.gmailSmimeEncryption || setting.smimeEncryption || setting;
-        if (smimeNode.enableSmimeEncryption === true || smimeNode.state === 'ENABLED') {
+        const valueNode = setting.value || setting;
+        Logger.log(`[DEBUG ID-061] valueNode extraído: ${JSON.stringify(valueNode)}`);
+        if (valueNode.enableSmimeEncryption === true || valueNode.enableSmimeEncryption === 'STATUS_ENABLED') {
           isSmimeEnabled = true;
+          Logger.log(`[DEBUG ID-061] ¡isSmimeEnabled seteado a TRUE!`);
+        } else {
+          Logger.log(`[DEBUG ID-061] valueNode.enableSmimeEncryption no indica habilitado. Es: ${valueNode.enableSmimeEncryption}`);
         }
+      } else {
+        Logger.log(`[DEBUG ID-061] rootPolicy.setting es nulo o indefinido.`);
       }
     } else {
       // Fase 2: Si no existe en la API global, buscar en los logs de auditoría como Fallback

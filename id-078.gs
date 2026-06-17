@@ -35,9 +35,10 @@ class GmailSpamOverrideListsStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.spam_override_lists");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.spam_override_lists"));
 
     let overrideCount = 0;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos lista vacía
@@ -45,11 +46,13 @@ class GmailSpamOverrideListsStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.spam_override_lists");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const overrideNode = setting.gmailSpamOverrideLists || setting.spamOverrideLists || setting;
+        Logger.log(`[DEBUG ID-078] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-078] valueNode: ${JSON.stringify(valueNode)}`);
         
         // Buscamos el arreglo de direcciones o dominios exentos
-        const senders = overrideNode.approvedSenders || overrideNode.addresses || overrideNode.senders || [];
+        const senders = valueNode.approvedSenders || valueNode.addresses || valueNode.senders || [];
         overrideCount = senders.length;
       }
     }
@@ -73,7 +76,7 @@ class GmailSpamOverrideListsStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: overrideCount,
       comentario078: comentario078,
       riesgo078: riesgo078,

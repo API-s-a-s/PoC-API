@@ -68,7 +68,7 @@ class GmailOcrAttachmentsStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const ocrPolicies = policies.filter(p => p.setting && (p.setting.type === "gmail.ocr_attachments" || p.setting.type === "gmail.ocr" || p.setting.type === "gmail.attachment_compliance"));
+    const ocrPolicies = policies.filter(p => p.setting && ((p.setting.type || "").endsWith("gmail.ocr_attachments") || (p.setting.type || "").endsWith("gmail.ocr") || (p.setting.type || "").endsWith("gmail.attachment_compliance")));
     let isOcrEnabled = false;
     let dataSource = "Memory";
     let rawData = null;
@@ -76,10 +76,11 @@ class GmailOcrAttachmentsStrategy extends ApiStrategy {
     if (ocrPolicies.length > 0) {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(ocrPolicies, ocrPolicies[0].setting.type);
       if (rootPolicy && rootPolicy.setting) {
+        Logger.log(`[DEBUG ID-085] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
         rawData = rootPolicy;
-        const setting = rootPolicy.setting;
-        const ocrNode = setting.gmailOcrAttachments || setting.ocrAttachments || setting.ocr || setting;
-        if (ocrNode.enableOcr === true || ocrNode.state === 'ENABLED' || ocrNode.ocrEnabled === true) {
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-085] valueNode: ${JSON.stringify(valueNode)}`);
+        if (valueNode.enableOcr === true || valueNode.state === 'ENABLED' || valueNode.ocrEnabled === true) {
           isOcrEnabled = true;
         }
       }

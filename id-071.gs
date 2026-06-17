@@ -35,9 +35,10 @@ class GmailLinksExternalImagesSecurityStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.links_and_external_images");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.links_and_external_images"));
 
     let isScanningEnabled = false;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que el escaneo no está habilitado
@@ -45,12 +46,13 @@ class GmailLinksExternalImagesSecurityStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.links_and_external_images");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const securityNode = setting.gmailLinksAndExternalImages || setting.linksAndExternalImages || setting;
+        Logger.log(`[DEBUG ID-071] rootPolicy: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-071] valueNode: ${JSON.stringify(valueNode)}`);
         
-        if (securityNode.enableExternalImageScanning === true || 
-            securityNode.enable_external_image_scanning === true || 
-            (securityNode.state && securityNode.state.toUpperCase() === 'ENABLED')) {
+        if (valueNode.enableExternalImageScanning === true || 
+            (valueNode.state && valueNode.state.toUpperCase() === 'ENABLED')) {
           isScanningEnabled = true;
         }
       }
@@ -78,7 +80,7 @@ class GmailLinksExternalImagesSecurityStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: respuestaConcreta,
       comentario071: comentario071,
       riesgo071: riesgo071,

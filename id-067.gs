@@ -1,8 +1,6 @@
 /**
  * Estrategia para auditar el uso de pasarelas de salida SMTP externas por usuario.
  * Evalúa si los usuarios pueden enviar correos a través de servidores SMTP de terceros.
- * Utiliza Cloud Identity API (v1beta1)
- * Desarrollada desde cero con lógica de negocio y comentarios inyectados para el ID-067.
  */
 class GmailPerUserOutboundGatewayStrategy extends ApiStrategy {
   constructor(customerId) {
@@ -37,9 +35,10 @@ class GmailPerUserOutboundGatewayStrategy extends ApiStrategy {
     const { policies } = globalContext;
     if (!policies) return this._buildErrorResponse("Falta el contexto global.");
 
-    const gmailPolicies = policies.filter(p => p.setting && p.setting.type === "gmail.per_user_outbound_gateway");
+    const gmailPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("gmail.per_user_outbound_gateway"));
 
     let isOutboundGatewayEnabled = false;
+    let rawData = null;
 
     if (gmailPolicies.length === 0) {
       // Por defecto, asumimos que no está habilitado explícitamente
@@ -47,12 +46,13 @@ class GmailPerUserOutboundGatewayStrategy extends ApiStrategy {
     } else {
       const rootPolicy = PolicyReducerFactory.getEffectiveRootPolicy(gmailPolicies, "gmail.per_user_outbound_gateway");
       if (rootPolicy && rootPolicy.setting) {
-        const setting = rootPolicy.setting;
-        const gatewayNode = setting.gmailPerUserOutboundGateway || setting.perUserOutboundGateway || setting;
+        Logger.log(`[DEBUG ID-067] Política raíz efectiva encontrada: ${JSON.stringify(rootPolicy.setting)}`);
+        rawData = rootPolicy;
+        const valueNode = rootPolicy.setting.value || rootPolicy.setting;
+        Logger.log(`[DEBUG ID-067] valueNode extraído: ${JSON.stringify(valueNode)}`);
         
-        if (gatewayNode.enablePerUserOutboundGateway === true || 
-            gatewayNode.enable_per_user_outbound_gateway === true || 
-            (gatewayNode.state && gatewayNode.state.toUpperCase() === 'ENABLED')) {
+        if (valueNode.enablePerUserOutboundGateway === true || 
+            (valueNode.state && valueNode.state.toUpperCase() === 'ENABLED')) {
           isOutboundGatewayEnabled = true;
         }
       }
@@ -80,7 +80,7 @@ class GmailPerUserOutboundGatewayStrategy extends ApiStrategy {
     // 4. RETORNAR EL OBJETO CONSOLIDADO PARA LA CLASE BASE
     return {
       name: this.name,
-      raw: json,
+      raw: rawData,
       valorPrincipal: respuestaConcreta,
       comentario067: comentario067,
       riesgo067: riesgo067,
