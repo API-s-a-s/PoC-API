@@ -109,9 +109,18 @@ class ApiStrategy {
     this.metricasConfig.forEach(metrica => {
       for (let i = 2; i < values.length; i++) {
         if (values[i][colId] && values[i][colId].toString().trim() === metrica.id) {
-          if (metrica.valueKey && res[metrica.valueKey] !== undefined) values[i][colSetting] = res[metrica.valueKey];
-          if (colNotes !== -1 && metrica.noteKey && res[metrica.noteKey] !== undefined) values[i][colNotes] = res[metrica.noteKey];
-          if (colRisk !== -1 && metrica.riskKey && res[metrica.riskKey] !== undefined) values[i][colRisk] = res[metrica.riskKey];
+          if (metrica.valueKey && res[metrica.valueKey] !== undefined) {
+            values[i][colSetting] = res[metrica.valueKey];
+            sheet.getRange(i + 1, colSetting + 1).clearDataValidations();
+          }
+          if (colNotes !== -1 && metrica.noteKey && res[metrica.noteKey] !== undefined) {
+            values[i][colNotes] = res[metrica.noteKey];
+            sheet.getRange(i + 1, colNotes + 1).clearDataValidations();
+          }
+          if (colRisk !== -1 && metrica.riskKey && res[metrica.riskKey] !== undefined) {
+            values[i][colRisk] = res[metrica.riskKey];
+            sheet.getRange(i + 1, colRisk + 1).clearDataValidations();
+          }
           if (colTime !== -1) values[i][colTime] = timestamp;
           
           needsUpdate = true;

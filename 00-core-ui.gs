@@ -11,6 +11,7 @@ function onOpen() {
       .addItem('🤵‍♂️ Ejecutar análisis de administración', 'AuditoriaAdministracion')
       .addItem('🧩 Ejecutar análisis de integración de apps', 'AuditoriasAppsExternas')
       .addItem('🧩 Ejecutar análisis de email y DNS', 'AuditoriasEmail')
+      .addItem('🧩 Ejecutar análisis de Drive', 'AuditoriaDrive')
       .addSeparator()
       .addItem('🩺 Ejecutar indice de exposición de datos personal', 'AuditoriaIEDrivePersonal')
       .addItem('🩺 Ejecutar indice de exposición de datos global', 'AuditoriaIEDGlobal')

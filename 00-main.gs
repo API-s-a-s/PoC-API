@@ -3,7 +3,8 @@
  */
 
 function AuditoriaIdentidadIdentificacion() {
-  const ui = SpreadsheetApp.getUi();  
+  const ui = SpreadsheetApp.getUi();
+  
   try {
     const auth = new AuthService();
     // OAuth config
@@ -59,6 +60,15 @@ function AuditoriaIdentidadIdentificacion() {
       
       new AuditTokens(userEmail), //7, 8
       new PasswordManagerStrategy(), //17
+      
+      
+      
+      
+      
+      
+      
+      
+      
       new PostSsoLoginPolicyStrategy(customerId), //20
       
       */       
@@ -115,15 +125,16 @@ function AuditoriaAdministracion() {
 
     // 1. Instanciamos las estrategias exclusivas de Administración
     const estrategias = [
-      new VaultServiceStatusStrategy(customerId, superAdminRoleId),
+      new SuperAdminRoleAssignmentStrategy(customerId, superAdminRoleId), // Celda G39
       new GroupsAdminRoleAssignmentStrategy(customerId, groupsAdminRoleId),
-      new ServicesAdminRoleStrategy(customerId, servicesAdminRoleId),
       new UserManagementAdminRoleStrategy(customerId, userAdminRoleId),
       new HelpDeskAdminRoleStrategy(customerId, helpDeskRoleId),
-      new MobileAdminRoleStrategy(customerId, mobileAdminRoleId),
-      new GoogleVoiceAdminRoleStrategy(customerId, voiceAdminRoleId),
       new AndroidAdminRoleStrategy(customerId, androidAdminRoleId),
-      new VaultAccessControlStrategy(customerId)
+      new GoogleVoiceAdminRoleStrategy(customerId, voiceAdminRoleId),
+      new MobileAdminRoleStrategy(customerId, mobileAdminRoleId),
+      new ServicesAdminRoleStrategy(customerId, servicesAdminRoleId),
+      new VaultServiceStatusStrategy(customerId, superAdminRoleId)
+
     ];
 
     // 2. Agregamos las estrategias al auditor
@@ -150,7 +161,6 @@ function AuditoriaAdministracion() {
     ui.alert("❌ Error: " + error.message);
   }
 }
-
 
 /**
  * Orquestador principal para la auditoría de Aplicaciones Externas (OAuth, Marketplace, etc.)
@@ -195,6 +205,7 @@ function AuditoriasAppsExternas() {
       new MarketplaceInstallPolicyStrategy(customerId),
       new AdminAppInstallEventStrategy(),
       new MarketplaceAllowlistStrategy(customerId),
+      new SamlAppsAuditStrategy(customerId)
     ];
 
     // 2. Agregamos las estrategias al auditor
@@ -234,8 +245,9 @@ function AuditoriasAppsExternas() {
 function AuditoriasEmail() {
   const ui = SpreadsheetApp.getUi();
   
-  try {    
-    const auth = new AuthService();    
+  try {
+    const auth = new AuthService();
+    
     // Extracción de variables comunes que podríamos necesitar
     const customerId = auth.getCustomerId();
     const domain = auth.getDomain();
@@ -281,6 +293,8 @@ function AuditoriasEmail() {
       new DkimRecordAuditStrategy(domain),
       new DmarcRecordAuditStrategy(domain),
       new MtaStsRecordAuditStrategy(domain),
+      
+      // Nuevas 14 estrategias implementadas
       new GmailSmimeEncryptionStrategy(customerId),
       new GmailSmimeCertificateManagementStrategy(customerId),
       new GmailWebOfflineStrategy(customerId),
@@ -296,7 +310,6 @@ function AuditoriasEmail() {
       new GmailRoutingRulesStrategy(customerId),
       new GmailSmtpRelayStrategy(customerId)
     ];
-
 
     // 2. Agregamos las estrategias al auditor
     estrategias.forEach(estrategia => auditor.addStrategy(estrategia));
@@ -325,6 +338,88 @@ function AuditoriasEmail() {
 
   } catch (error) {
     Logger.log("Error en auditoría de email: " + error.stack);
+    ui.alert("❌ Error: " + error.message);
+  }
+}
+/**
+* Orquestador principal para la auditoría de Google Drive
+*/
+function AuditoriaDrive() {
+  const ui = SpreadsheetApp.getUi();
+  
+  try {
+    const auth = new AuthService();
+    
+    // Extracción de variables comunes que podríamos necesitar
+    const customerId = auth.getCustomerId();
+    // Obtener el email del usuario actual para pasarlo a estrategias que lo requieran (ej. AuditTokens)
+    const userEmail = auth.getCurrentUserEmail();
+
+    // 0. Inicializar contexto global en RAM (Censo de usuarios con roles y Políticas)
+    const censoWrapper = new CensusStateWrapper();
+    censoWrapper.buildAndStoreCensus(auth, customerId);
+    const censo = censoWrapper.getCensus();
+    
+    const policyQuery = new GlobalPolicyExtractor(auth, customerId);
+    const politicas = policyQuery.fetchTree();
+    
+    const globalContext = {
+      census: censo,
+      policies: politicas
+    };
+    
+    // Instanciamos el facade
+    const auditor = new SecurityAuditorFacade(auth, globalContext);
+
+    // --- 1. DEFINICIÓN DE ESTRATEGIAS ---
+    // Aquí conectamos cada estrategia con su lógica de negocio.
+    const estrategias = [
+      new DriveExternalSharingModeStrategy(customerId),
+      new DriveAllowlistedDomainsSharingStrategy(customerId),
+      new DriveWarnExternalSharingStrategy(customerId),
+      new DriveAllowNonGoogleInvitesStrategy(customerId),
+      new DriveAllowPublishingFilesStrategy(customerId),
+      new DriveAllowReceivingExternalFilesStrategy(customerId),
+      new DriveAccessCheckerSuggestionsStrategy(customerId),
+      new DriveTargetAudiencesStrategy(customerId, auth),
+      new DriveSharedDriveDistributingContentStrategy(customerId),
+      new DrivePreventSharedDriveCreationStrategy(customerId),
+      new DriveAllowManagersToOverrideStrategy(customerId),
+      new DriveAllowExternalUserAccessStrategy(customerId),
+      new DriveAllowNonMemberAccessStrategy(customerId),
+      new DriveAllowedPartiesDownloadPrintCopyStrategy(customerId),
+      new DriveDefaultFileAccessStrategy(customerId)
+    ];
+
+    // --- 2. REGISTRO DE ESTRATEGIAS ---
+    estrategias.forEach(estrategia => auditor.addStrategy(estrategia));
+
+    // Si no hay estrategias aún, avisamos y salimos para no ejecutar en vacío
+    if (estrategias.length === 0) {
+      ui.alert("El módulo de Google Drive está listo, pero aún no tiene métricas asignadas.");
+      return;
+    }
+
+    // --- 3. EJECUCIÓN ---
+    ui.showModelessDialog(HtmlService.createHtmlOutput("⏳ Procesando auditoría de Google Drive, puede tomar algunos segundos..."), "Estado");
+    
+    const resultados = auditor.ejecutarTodo();
+    
+    // --- 4. ESCRITURA EN SHEETS (Polimorfismo) ---
+    resultados.forEach(res => {
+      const estrategiaResponsable = estrategias.find(e => e.name === res.name);
+      
+      if (estrategiaResponsable && res) {
+        estrategiaResponsable.writeToSheet(res); 
+      }
+    });
+    
+    // --- 5. FINALIZACIÓN ---
+    generarResumenSemaforo();
+    ui.alert("✅ Auditoría de Google Drive completada con éxito.");
+
+  } catch (error) {
+    Logger.log("Error en auditoría de Google Drive: " + error.stack);
     ui.alert("❌ Error: " + error.message);
   }
 }
