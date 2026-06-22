@@ -127,37 +127,40 @@ class SsoAuditStrategy extends ApiStrategy {
     Logger.log(`[ID-002] Asignaciones: ${activosAsignados} de ${totalPerfiles} en uso. Aplicado mediante: ${targetsUnicos}`);
 
     // =======================================================================
-    // PASO 6: ASIGNACIÓN DE RIESGOS Y RETORNO
+    // PASO 6: ASIGNACIÓN DE RIESGOS Y RETORNO (ID-001 e ID-002 Desacoplados)
     // =======================================================================
     
-    // ID-001
-    let riesgo001 = "Bajo";
-    let comentario001 = `La organización cuenta con ${totalPerfiles} perfiles SSO perfiles de Proveedor de Identidad de ${nombresPerfilesStr} externos configurados. (Se debe auditar el proveedor).`;
+    // ---------------- ID-001 ----------------
+    const riesgo001 = "Alto";
+    const comentario001 = `La organización cuenta con ${totalPerfiles} perfiles SSO perfiles de Proveedor de Identidad de ${nombresPerfilesStr} externos configurados. (Se debe auditar el proveedor).`;
 
-    // ID-002
+    // ---------------- ID-002 ----------------
     let riesgo002, comentario002, valorSecundario;
     
-    // Precedencia (Grupos tienen prioridad sobre OUs, lo que indica un uso parcial o enfocado)
+    // Precedencia (Grupos tienen prioridad sobre OUs)
     const tieneGrupos = targetsUnicosArr.includes("Grupos (Excepciones)");
     const tieneOUs = targetsUnicosArr.includes("Unidad Organizativa");
     
     if (porcentajeNum === 0) {
-      riesgo002 = "Alto";
+      // Caso A: SSO Apagado
       valorSecundario = "Inhabilitado";
-      comentario002 = "Ningún perfil de autenticación mapeado está haciendo uso operativo de SSO. Validar si hay cambios pendientes de aprobación.";
+      riesgo002 = "Alto";
+      comentario002 = "Directorio dependiente de credenciales nativas de Google Workspace";
     } else if (porcentajeNum === 100 && !tieneGrupos && tieneOUs) {
-      riesgo002 = "Bajo";
+      // Caso C: SSO Totalmente Activo
       valorSecundario = "Habilitado";
-      comentario002 = `El 100% de los perfiles SSO configurados tienen una redirección activa mediante asignaciones a: ${targetsUnicos}.`;
-    } else {
       riesgo002 = "Medio";
+      comentario002 = "Autenticación delegada al 100% a un IdP Externo.";
+    } else {
+      // Caso B: Implementación a medias
       valorSecundario = "Parcial";
-      comentario002 = `El ${porcentajeNum}% de los perfiles configurados reciben aserciones de identidad vigentes, o existen asignaciones enfocadas por Grupos que tienen precedencia.`;
+      riesgo002 = "Medio";
+      comentario002 = "Asignación de SSO fragmentada entre Unidades Organizativas o Grupos.";
     }
 
     return {
       name: this.name,
-      valorPrincipal: `${totalPerfiles} configurados`, 
+      valorPrincipal: `${totalPerfiles} Configurados`, 
       comentario001: comentario001,
       riesgo001: riesgo001,
       score001: this.calcularScoreDeRiesgo(riesgo001),
@@ -183,14 +186,17 @@ class SsoAuditStrategy extends ApiStrategy {
   _buildEmptyResponse() {
     return {
       name: this.name,
+      // Salidas ID-001
       valorPrincipal: "Inhabilitado",
       riesgo001: "Alto",
       score001: 1,
       comentario001: "La organización no cuenta con perfiles de Proveedor de Identidad (IdP) externos configurados. (Se debe revisar)",
+      
+      // Salidas ID-002 (Caso A)
       valorSecundario: "Inhabilitado",
       riesgo002: "Alto",
       score002: 1,
-      comentario002: "Ningún perfil de autenticación en la organización está haciendo uso de configuración SSO."
+      comentario002: "Directorio dependiente de credenciales nativas de Google Workspace"
     };
   }
 
