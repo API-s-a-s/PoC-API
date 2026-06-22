@@ -30,6 +30,8 @@ class PasswordReusePolicyStrategy extends ApiStrategy {
     // 1. FILTRAR POLÍTICAS DE CONTRASEÑA
     const passwordPolicies = policies.filter(p => p.setting && p.setting.type.includes("security.password"));
 
+    // 2. ESCENARIO A: SILENCIO DE LA API (Eliminado)
+    // Dejamos que el motor procese. Al no haber políticas, asumirá la reutilización como 'true' (por defecto de fábrica).
     // 3. ESCENARIO B: EVALUAR POLÍTICA RAÍZ
     const rootPolicy = passwordPolicies.find(p => !(p.query || "").includes("entity."));
     
@@ -70,14 +72,22 @@ class PasswordReusePolicyStrategy extends ApiStrategy {
     }
 
     const totalUsuarios = usuariosPermitidos + usuariosBloqueados;
-    const porcentajePermitidos = totalUsuarios > 0 ? Math.round((usuariosPermitidos / totalUsuarios) * 100) : 0;
+    const porcentajeBloqueados = totalUsuarios > 0 ? Math.round((usuariosBloqueados / totalUsuarios) * 100) : 0;
     
     // 5. ASIGNAR RIESGO Y CONSTRUIR RESULTADO
     // Permitir la reutilización es un riesgo de seguridad (Alto). Bloquearlo es seguro (Bajo).
     let riesgo = isReuseAllowed ? "Alto" : "Bajo";
-    let comentario = `${porcentajePermitidos}% vulnerables`; 
     
-    Logger.log(`[ID-004] Métrica procesada. Riesgo: ${riesgo}. Permitido en: ${porcentajePermitidos}% de usuarios.`);
+    let comentario;
+    if (passwordPolicies.length === 0) {
+      comentario = "La organización no tiene configuradas políticas personalizadas de contraseñas. Por defecto de fábrica, se permite la reutilización.";
+    } else if (isReuseAllowed) {
+      comentario = `Las políticas actuales permiten la reutilización de contraseñas en la raíz del dominio. Solo al ${porcentajeBloqueados}% de los usuarios se les prohíbe reutilizarlas mediante excepciones.`;
+    } else {
+      comentario = `El ${porcentajeBloqueados}% de los usuarios tiene prohibida la reutilización de contraseñas antiguas.`;
+    }
+    
+    Logger.log(`[ID-004] Métrica procesada. Riesgo: ${riesgo}. Bloqueado en: ${porcentajeBloqueados}% de usuarios.`);
 
     return {
       name: this.name,
