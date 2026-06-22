@@ -31,14 +31,14 @@ class PostSsoLoginPolicyStrategy extends ApiStrategy {
   }
   // Traductor estandarizado: Convierte la palabra clave del riesgo a valor numérico
   calcularScoreDeRiesgo(nivelRiesgo) {
-    if (!nivelRiesgo) return null;
+    if (!nivelRiesgo) return "";
     const riesgoNormalizado = nivelRiesgo.toString().trim().toLowerCase();
     
     if (riesgoNormalizado === "alto") return 1;
     if (riesgoNormalizado === "medio") return 2;
     if (riesgoNormalizado === "bajo") return 3;
     
-    return null;
+    return "";
   }
   parseResponse(json) {
     // 1. EVALUACIÓN EN CASO DE ERROR DE API

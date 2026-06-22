@@ -35,49 +35,37 @@ class SsoAuditStrategy extends ApiStrategy {
     }
     
     // =======================================================================
-    // PASO 2: EXTRAER PERFILES SSO
-    // Buscamos cuántos proveedores de identidad (ej. Azure) se han configurado.
-    // Si la lista es muy larga, usamos nuestro paginador universal.
+    // PASO 2: EXTRAER PERFILES SSO (SAML y OIDC)
     // =======================================================================
-    let perfilesSso = json.inboundSamlSsoProfiles || [];
+    let perfilesSaml = json.inboundSamlSsoProfiles || [];
     if (json.nextPageToken) {
-      const todos = this.fetchPaginated(this.url, "inboundSamlSsoProfiles");
-      if (todos) perfilesSso = todos;
+      const todosSaml = this.fetchPaginated(this.url, "inboundSamlSsoProfiles");
+      if (todosSaml) perfilesSaml = todosSaml;
     }
 
-    const totalPerfiles = perfilesSso.length;
-    
-    // =======================================================================
-    // Si no hay perfiles creados, abortamos temprano y reportamos inhabilitado.
-    // =======================================================================
-    if (totalPerfiles === 0) {
-      Logger.log("[ID-001] Respuesta de la API: 0 perfiles configurados.");
-      return this._buildEmptyResponse();
-    }
-
-    const nombresPerfiles = perfilesSso.map(p => p.displayName).join(", ");
-    Logger.log(`[ID-001] Respuesta de la API (Perfiles): Se encontraron ${totalPerfiles} perfiles base.`);
+    // Endpoint OIDC
+    const filter = `customer=="customers/${this.customerId}"`;
+    const urlOidc = `https://cloudidentity.googleapis.com/v1/inboundOidcSsoProfiles?filter=${encodeURIComponent(filter)}`;
+    const perfilesOidc = this.fetchPaginated(urlOidc, "inboundOidcSsoProfiles") || [];
 
     // =======================================================================
-    // PASO 4: OBTENER ASIGNACIONES VIVAS
-    // endpoint para ver a qué OUs o Grupos se les está aplicando realmente.
+    // PASO 3: OBTENER ASIGNACIONES VIVAS (El Cerebro)
     // =======================================================================
-    const filterAssignments = `customer=="customers/${this.customerId}"`;
-    const urlAssignments = `https://cloudidentity.googleapis.com/v1/inboundSsoAssignments?filter=${encodeURIComponent(filterAssignments)}`;
+    const urlAssignments = `https://cloudidentity.googleapis.com/v1/inboundSsoAssignments?filter=${encodeURIComponent(filter)}`;
     const asignacionesVivas = this.fetchPaginated(urlAssignments, "inboundSsoAssignments") || [];
 
     let perfilesActivosUnicos = new Set();
     let targetsDetectados = []; // Registramos si se aplica a OUs o Grupos
     
     for (const asignacion of asignacionesVivas) {
-      // Verificamos si la asignación es de tipo SSO válido
+      // Contabiliza asignaciones cuyo ssoMode sea estrictamente SAML_SSO u OIDC_SSO
       if (asignacion.ssoMode === "SAML_SSO" || asignacion.ssoMode === "OIDC_SSO") {
-        const perfilVinculado = asignacion.samlSsoProfile || asignacion.ssoProfile;
+        // Obtenemos la referencia al perfil según lo documentado
+        const perfilVinculado = asignacion.samlSsoProfile || asignacion.ssoProfile || asignacion.signInBehavior?.ssoProfile;
         
         if (perfilVinculado) {
-          perfilesActivosUnicos.add(perfilVinculado);
-          
-          // Clasificamos dónde se está aplicando según la documentación oficial
+          perfilesActivosUnicos.add(perfilVinculado);          
+          // Precedencia y target (OUs vs Grupos)
           if (asignacion.targetOrgUnit) targetsDetectados.push("Unidad Organizativa");
           if (asignacion.targetGroup) targetsDetectados.push("Grupos (Excepciones)");
         }
@@ -85,57 +73,103 @@ class SsoAuditStrategy extends ApiStrategy {
     }
 
     // =======================================================================
-    // PASO 5: CALCULAR ADOPCIÓN Y PREPARAR TEXTOS
-    // Comparamos los perfiles creados vs los que realmente tienen asignaciones.
+    // PASO 4: CONSOLIDAR PERFILES (Filtrando System Profiles OIDC sin uso)
     // =======================================================================
-    const totalActivos = perfilesActivosUnicos.size;
-    const porcentajeNum = Math.round((totalActivos / totalPerfiles) * 100);
-    
-    // Unificamos el texto para que sea informativo (Ej. "Unidad Organizativa y Grupos")
-    const targetsUnicos = [...new Set(targetsDetectados)].join(" y ") || "Desconocido";
+    let perfilesValidos = [];
+    let nombresPerfiles = [];
 
-    Logger.log(`[ID-002] Respuesta de la API (Asignaciones): ${totalActivos} de ${totalPerfiles} en uso. Aplicado mediante: ${targetsUnicos}`);
+    // Procesar SAML (Legacy SSO)
+    for (const p of perfilesSaml) {
+      perfilesValidos.push(p);
+      nombresPerfiles.push(p.displayName || "SAML Profile");
+    }
+
+    // Procesar OIDC (Conexiones modernas)
+    for (const p of perfilesOidc) {
+      const nameLower = (p.displayName || "").toLowerCase();
+      // Extraemos propiedades que indiquen que es un System Profile (Ej. Microsoft)
+      const isSystem = nameLower.includes("microsoft") || p.isSystemProfile === true || p.systemProfile === true;
+      const isAssigned = perfilesActivosUnicos.has(p.name);
+
+      if (!isSystem || isAssigned) {
+        perfilesValidos.push(p);
+        nombresPerfiles.push(p.displayName || "OIDC Profile");
+      }
+    }
+
+    const totalPerfiles = perfilesValidos.length;
+    
+    // Si no hay perfiles válidos creados o asignados
+    if (totalPerfiles === 0) {
+      Logger.log("[ID-001] Respuesta: 0 perfiles configurados (o solo sistema inactivo).");
+      return this._buildEmptyResponse();
+    }
+
+    const nombresPerfilesStr = nombresPerfiles.join(", ");
+    Logger.log(`[ID-001] Perfiles consolidados (SAML + OIDC): ${totalPerfiles} válidos.`);
+
+    // =======================================================================
+    // PASO 5: CALCULAR ADOPCIÓN (Precedencia y Targets)
+    // =======================================================================
+    let activosAsignados = 0;
+    for (const p of perfilesValidos) {
+      if (perfilesActivosUnicos.has(p.name)) {
+        activosAsignados++;
+      }
+    }
+
+    const porcentajeNum = Math.round((activosAsignados / totalPerfiles) * 100);
+    
+    // Unificar targets únicos detectados
+    const targetsUnicosArr = [...new Set(targetsDetectados)];
+    const targetsUnicos = targetsUnicosArr.join(" y ") || "Desconocido";
+
+    Logger.log(`[ID-002] Asignaciones: ${activosAsignados} de ${totalPerfiles} en uso. Aplicado mediante: ${targetsUnicos}`);
 
     // =======================================================================
     // PASO 6: ASIGNACIÓN DE RIESGOS Y RETORNO
-    // preparamos las métricas para ambas simultáneamente.
     // =======================================================================
     
-    // Métrica ID-001: Riesgo sobre la existencia de perfiles
+    // ID-001
     let riesgo001 = "Bajo";
-    let comentario001 = `Se identificaron ${totalPerfiles} perfiles SSO declarados: [${nombresPerfiles}]. Su alteración puede requerir aprobación multipartita.`;
+    let comentario001 = `Se identificaron ${totalPerfiles} perfiles SSO (SAML/OIDC) declarados: [${nombresPerfilesStr}]. Su alteración puede requerir aprobación multipartita.`;
 
-    // Métrica ID-002: Riesgo sobre la asignación/uso de esos perfiles
-    let riesgo002, comentario002;
+    // ID-002
+    let riesgo002, comentario002, valorSecundario;
+    
+    // Precedencia (Grupos tienen prioridad sobre OUs, lo que indica un uso parcial o enfocado)
+    const tieneGrupos = targetsUnicosArr.includes("Grupos (Excepciones)");
+    const tieneOUs = targetsUnicosArr.includes("Unidad Organizativa");
     
     if (porcentajeNum === 0) {
       riesgo002 = "Alto";
+      valorSecundario = "Inhabilitado";
       comentario002 = "Ningún perfil de autenticación mapeado está haciendo uso operativo de SSO. Validar si hay cambios pendientes de aprobación.";
-    } else if (porcentajeNum === 100) {
+    } else if (porcentajeNum === 100 && !tieneGrupos && tieneOUs) {
       riesgo002 = "Bajo";
-      comentario002 = `El 100% de los perfiles SSO configurados tienen una redirección activa mediante asignaciones dirigidas a: ${targetsUnicos}.`;
+      valorSecundario = "Habilitado";
+      comentario002 = `El 100% de los perfiles SSO configurados tienen una redirección activa mediante asignaciones a: ${targetsUnicos}.`;
     } else {
       riesgo002 = "Medio";
-      comentario002 = `Implementación parcial. Solo el ${porcentajeNum}% de los perfiles configurados reciben aserciones de identidad vigentes.`;
+      valorSecundario = "Parcial";
+      comentario002 = `El ${porcentajeNum}% de los perfiles configurados reciben aserciones de identidad vigentes, o existen asignaciones enfocadas por Grupos que tienen precedencia.`;
     }
 
     return {
       name: this.name,
-      // Salidas para ID-001
       valorPrincipal: `${totalPerfiles} Configurados`, 
       comentario001: comentario001,
       riesgo001: riesgo001,
       score001: this.calcularScoreDeRiesgo(riesgo001),
       
       // Salidas para ID-002
-      valorSecundario: porcentajeNum === 0 ? "Inhabilitado" : (porcentajeNum === 100 ? "Habilitado" : "Parcial"), 
+      valorSecundario: valorSecundario, 
       comentario002: comentario002,
       riesgo002: riesgo002,
       score002: this.calcularScoreDeRiesgo(riesgo002)
     };
   }
 
-  // Convierte el texto "Alto", "Medio", "Bajo" en un número (Score)
   calcularScoreDeRiesgo(nivelRiesgo) {
     if (!nivelRiesgo) return "";
     const riesgoNormalizado = nivelRiesgo.toString().trim().toLowerCase();
