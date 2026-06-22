@@ -40,13 +40,13 @@ class StrongPasswordPolicyStrategy extends ApiStrategy {
     // personalizadas. Como acordamos, imprimimos "empty" en este caso.
     // =======================================================================
     if (passwordPolicies.length === 0) {
-      Logger.log("[DEBUG ID-003] ALERTA: La API no retorna datos para contraseñas.");
+      Logger.log("[DEBUG ID-003] ALERTA: La API no retorna datos para contraseñas. Asumiendo configuración de fábrica (WEAK).");
       return {
         name: this.name,
-        valorPrincipal: "empty.",
-        comentario003: "omitió datos.",
-        riesgo003: "",
-        score003: ""
+        valorPrincipal: "Contraseñas Débiles ",
+        comentario003: "0%",
+        riesgo003: "Alto",
+        score003: this.calcularScoreDeRiesgo("Alto")
       };
     }
 
@@ -68,9 +68,8 @@ class StrongPasswordPolicyStrategy extends ApiStrategy {
       isRootEnforced = pwdNode.enforceRequirementsAtLogin === true;
     }
 
-    // Formateamos el texto principal (Ej. "Pswd on - force login off")
-    let estadoPrincipal = rootStrength === "STRONG" ? "Pswd on" : "Débil";
-    if (!isRootEnforced) estadoPrincipal += " - force login off";
+    // Formateamos el texto principal
+    let estadoPrincipal = rootStrength === "STRONG" ? "Contraseñas Fuertes" : "Contraseñas Débiles";
     
     Logger.log(`[ID-003] Raíz de la Org: Fuerza='${rootStrength}', Forzado=${isRootEnforced}`);
 
@@ -115,13 +114,13 @@ class StrongPasswordPolicyStrategy extends ApiStrategy {
     };
   }
 
-  // Función auxiliar para saber si una política exige contraseña FUERTE y FORZADA
+  // Función auxiliar para saber si una política exige contraseña FUERTE
   _isPolicyStrong(policy) {
     if (!policy || !policy.setting) return false;
     const configNode = policy.setting.value || policy.setting;
     const pwdNode = configNode.password || configNode;
     
-    return pwdNode.allowedStrength === "STRONG" && pwdNode.enforceRequirementsAtLogin === true;
+    return pwdNode.allowedStrength === "STRONG";
   }
 
   // Convierte el texto "Alto", "Medio", "Bajo" en un número (Score)
