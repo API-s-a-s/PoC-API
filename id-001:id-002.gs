@@ -132,7 +132,7 @@ class SsoAuditStrategy extends ApiStrategy {
     
     // ID-001
     let riesgo001 = "Bajo";
-    let comentario001 = `Se identificaron ${totalPerfiles} perfiles SSO (SAML/OIDC) declarados: [${nombresPerfilesStr}]. Su alteración puede requerir aprobación multipartita.`;
+    let comentario001 = `La organización cuenta con ${totalPerfiles} perfiles SSO perfiles de Proveedor de Identidad de ${nombresPerfilesStr} externos configurados. (Se debe auditar el proveedor).`;
 
     // ID-002
     let riesgo002, comentario002, valorSecundario;
@@ -157,7 +157,7 @@ class SsoAuditStrategy extends ApiStrategy {
 
     return {
       name: this.name,
-      valorPrincipal: `${totalPerfiles} Configurados`, 
+      valorPrincipal: `${totalPerfiles} configurados`, 
       comentario001: comentario001,
       riesgo001: riesgo001,
       score001: this.calcularScoreDeRiesgo(riesgo001),
@@ -186,7 +186,7 @@ class SsoAuditStrategy extends ApiStrategy {
       valorPrincipal: "Inhabilitado",
       riesgo001: "Alto",
       score001: 1,
-      comentario001: "La organización no cuenta con perfiles SSO activos o su creación espera aprobación multipartita.",
+      comentario001: "La organización no cuenta con perfiles de Proveedor de Identidad (IdP) externos configurados. (Se debe revisar)",
       valorSecundario: "Inhabilitado",
       riesgo002: "Alto",
       score002: 1,
