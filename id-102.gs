@@ -35,7 +35,7 @@ class DrivePreventSharedDriveCreationStrategy extends ApiStrategy {
 
     const targetPolicies = policies.filter(p => p.setting && (p.setting.type || "").endsWith("drive_and_docs.shared_drive_creation"));
     
-    let extractedValue = true;
+    let extractedValue = null; // No asumimos true si viene vacío
     let rawData = null;
 
     if (targetPolicies.length > 0) {
@@ -62,10 +62,14 @@ class DrivePreventSharedDriveCreationStrategy extends ApiStrategy {
       respuestaConcreta = "No evita creación (Habilitado)";
       riesgo = "Medio";
       comentario = "La restricción está inactiva (valor true). Los usuarios pueden crear nuevas unidades compartidas, lo que puede resultar en proliferación descontrolada y pérdida de visibilidad administrativa.";
-    } else {
+    } else if (extractedValue === false) {
       respuestaConcreta = "Evita creación (Deshabilitado)";
       riesgo = "Bajo";
       comentario = "La restricción está activa (valor false). Se evita que los usuarios comunes creen nuevas unidades compartidas, manteniendo el control centralizado por parte de los administradores.";
+    } else {
+      respuestaConcreta = "No definido (Asume inactivo)";
+      riesgo = "Medio";
+      comentario = "La configuración no está explícitamente definida por la política, por lo que hereda el comportamiento predeterminado que no evita activamente la creación de unidades.";
     }
 
     Logger.log(`[LOG] Drive Prevent Shared Drive Creation Audit: Resultado -> ${respuestaConcreta} | Riesgo: ${riesgo}`);

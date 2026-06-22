@@ -53,24 +53,11 @@ function AuditoriaIdentidadIdentificacion() {
       /**
       new AdvancedProtectionPolicyStrategy(customerId), //24      
       new EmployeeIdStrategy(), //22
-      new UsuarioConfiguracionAvanzadaStrategy(), //25
-      
+      new UsuarioConfiguracionAvanzadaStrategy(), //25      
       new ContextAwareAccessStrategy(zeroTrustPolicyId), //27
-      
-      
       new AuditTokens(userEmail), //7, 8
       new PasswordManagerStrategy(), //17
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      new PostSsoLoginPolicyStrategy(customerId), //20
-      
+      new PostSsoLoginPolicyStrategy(customerId), //20      
       */       
     ];
   // 2. Agregamos las estrategias al auditor
@@ -125,7 +112,6 @@ function AuditoriaAdministracion() {
 
     // 1. Instanciamos las estrategias exclusivas de Administración
     const estrategias = [
-      new SuperAdminRoleAssignmentStrategy(customerId, superAdminRoleId), // Celda G39
       new GroupsAdminRoleAssignmentStrategy(customerId, groupsAdminRoleId),
       new UserManagementAdminRoleStrategy(customerId, userAdminRoleId),
       new HelpDeskAdminRoleStrategy(customerId, helpDeskRoleId),
@@ -133,8 +119,8 @@ function AuditoriaAdministracion() {
       new GoogleVoiceAdminRoleStrategy(customerId, voiceAdminRoleId),
       new MobileAdminRoleStrategy(customerId, mobileAdminRoleId),
       new ServicesAdminRoleStrategy(customerId, servicesAdminRoleId),
-      new VaultServiceStatusStrategy(customerId, superAdminRoleId)
-
+      new VaultServiceStatusStrategy(customerId, superAdminRoleId),
+      new VaultAccessControlStrategy(customerId)
     ];
 
     // 2. Agregamos las estrategias al auditor
@@ -204,8 +190,7 @@ function AuditoriasAppsExternas() {
       new ServiceAccountKeyAgeStrategy(gcpProjectId, gcpServiceAccount),
       new MarketplaceInstallPolicyStrategy(customerId),
       new AdminAppInstallEventStrategy(),
-      new MarketplaceAllowlistStrategy(customerId),
-      new SamlAppsAuditStrategy(customerId)
+      new MarketplaceAllowlistStrategy(customerId)
     ];
 
     // 2. Agregamos las estrategias al auditor
@@ -388,7 +373,10 @@ function AuditoriaDrive() {
       new DriveAllowExternalUserAccessStrategy(customerId),
       new DriveAllowNonMemberAccessStrategy(customerId),
       new DriveAllowedPartiesDownloadPrintCopyStrategy(customerId),
-      new DriveDefaultFileAccessStrategy(customerId)
+      new DriveDefaultFileAccessStrategy(customerId),
+      new DriveSdkApiAccessStrategy(customerId),
+      new DriveForDesktopStrategy(customerId)
+
     ];
 
     // --- 2. REGISTRO DE ESTRATEGIAS ---
