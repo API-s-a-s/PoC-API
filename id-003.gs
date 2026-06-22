@@ -43,8 +43,8 @@ class StrongPasswordPolicyStrategy extends ApiStrategy {
       Logger.log("[DEBUG ID-003] ALERTA: La API no retorna datos para contraseñas. Asumiendo configuración de fábrica (WEAK).");
       return {
         name: this.name,
-        valorPrincipal: "Contraseñas Débiles ",
-        comentario003: "0%",
+        valorPrincipal: "Contraseñas Débiles",
+        comentario003: "La organización no tiene configuradas políticas personalizadas de contraseñas. Por defecto de fábrica, se permiten contraseñas débiles.",
         riesgo003: "Alto",
         score003: this.calcularScoreDeRiesgo("Alto")
       };
@@ -103,7 +103,9 @@ class StrongPasswordPolicyStrategy extends ApiStrategy {
     // El riesgo depende de si la política principal de la empresa es STRONG o no.
     // =======================================================================
     let riesgo = (rootStrength === "STRONG") ? "Bajo" : "Alto";
-    let comentario = `${porcentajeCumplimiento}%`; // Solo imprimimos el número
+    let comentario = (rootStrength === "STRONG")
+      ? `El ${porcentajeCumplimiento}% de los usuarios tiene exigida una política de contraseñas fuertes.`
+      : `Las políticas actuales permiten el uso de contraseñas débiles en la raíz del dominio. Solo el ${porcentajeCumplimiento}% de los usuarios está forzado a usar contraseñas fuertes mediante excepciones.`;
     
     return {
       name: this.name,

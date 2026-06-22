@@ -30,18 +30,6 @@ class PasswordReusePolicyStrategy extends ApiStrategy {
     // 1. FILTRAR POLÍTICAS DE CONTRASEÑA
     const passwordPolicies = policies.filter(p => p.setting && p.setting.type.includes("security.password"));
 
-    // 2. ESCENARIO A: SILENCIO DE LA API
-    if (passwordPolicies.length === 0) {
-      Logger.log("[DEBUG ID-004] ALERTA: La API no retorna datos para contraseñas.");
-      return {
-        name: this.name,
-        valorPrincipal: "empty.",
-        comentario004: "omitió datos.",
-        riesgo004: "",
-        score004: ""
-      };
-    }
-
     // 3. ESCENARIO B: EVALUAR POLÍTICA RAÍZ
     const rootPolicy = passwordPolicies.find(p => !(p.query || "").includes("entity."));
     
@@ -87,7 +75,7 @@ class PasswordReusePolicyStrategy extends ApiStrategy {
     // 5. ASIGNAR RIESGO Y CONSTRUIR RESULTADO
     // Permitir la reutilización es un riesgo de seguridad (Alto). Bloquearlo es seguro (Bajo).
     let riesgo = isReuseAllowed ? "Alto" : "Bajo";
-    let comentario = `${porcentajePermitidos}%`; 
+    let comentario = `${porcentajePermitidos}% vulnerables`; 
     
     Logger.log(`[ID-004] Métrica procesada. Riesgo: ${riesgo}. Permitido en: ${porcentajePermitidos}% de usuarios.`);
 
