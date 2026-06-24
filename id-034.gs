@@ -110,7 +110,12 @@ class VaultServiceStatusStrategy extends ApiStrategy {
           const nodeStr = JSON.stringify(rootPolicy.setting).toUpperCase();
           const isEnabled = nodeStr.includes('"STATE":"ENABLED"') || 
                             nodeStr.includes('"SERVICESTATE":"ENABLED"') ||
-                            nodeStr.includes('"ENABLED":TRUE');
+                            nodeStr.includes('"ENABLED":TRUE') ||
+                            nodeStr.includes('"STATE":"ON"') ||
+                            nodeStr.includes('"SERVICESTATE":"ON"') ||
+                            nodeStr.includes('"STATE":TRUE') ||
+                            nodeStr.includes('"SERVICESTATE":TRUE') ||
+                            nodeStr.includes('"VALUE":TRUE');
 
           if (isEnabled) {
             vaultStatus = "Habilitado (Explícito)";

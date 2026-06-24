@@ -62,7 +62,7 @@ class TwoStepVerificationEnforcementPolicyStrategy extends ApiStrategy {
       isRootEnforced = this._isEnforced(rootPolicy);
     }
 
-    const estadoPrincipal = isRootEnforced ? "Obligatorio" : "Opcional";
+    const estadoPrincipal = isRootEnforced ? "Obligatorio" : "Habilitad0";
     Logger.log(`[ID-009] Raíz de la Org: Exigencia de 2SV = ${estadoPrincipal}`);
 
     // =======================================================================

@@ -14,13 +14,19 @@ class CELParserEngine {
 
   static evaluate(policy, user) {
     const q = (policy && policy.policyQuery && policy.policyQuery.query) ? policy.policyQuery.query : "";
+    
+    Logger.log(`[CEL DEBUG] Evaluando query: '${q}' para usuario ${user.email}`);
 
     // Si el query está vacío o es una regla global de cliente, aplica a todos por defecto
     if (q.trim() === "" || q.includes("customer==")) {
       if (!q.includes("entity.")) {
-          // VALIDACIÓN ESTRICTA: Si es una regla global pero el usuario NO tiene licencia de Google Workspace
-          // lo descartamos, ya que las políticas de Workspace no aplican a usuarios de solo Cloud Identity Free.
-          const hasWorkspaceLicense = user.licenses && user.licenses.some(sku => sku.includes('/product/Google-Apps/'));
+          // VALIDACIÓN ESTRICTA: Verificamos si el usuario tiene licencia de Google Workspace O Cloud Identity.
+          // Las políticas de seguridad como 2SV aplican también a Cloud Identity Free (101031).
+          // Fallback open: Si no hay array de licencias, lo dejamos pasar para no romper el motor.
+          const hasWorkspaceLicense = !user.licenses || user.licenses.length === 0 || user.licenses.some(sku => 
+              sku.includes('/product/Google-Apps/') || sku.includes('/product/101031')
+          );
+          
           if (!hasWorkspaceLicense) {
              this.discardedUsersLogs.add(user.email);
              return false;

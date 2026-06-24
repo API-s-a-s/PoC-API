@@ -35,19 +35,10 @@ class AdminTwoStepVerificationEnforcementStrategy extends ApiStrategy {
     Logger.log(`[ID-010] Políticas de Exigencia MFA encontradas en memoria: ${enforcementPolicies.length}`);
 
     // =======================================================================
-    // PASO 2: ESCENARIO A - SILENCIO DE LA API
-    // Si no hay datos, el estado de fábrica de Google es que el 2SV NO es obligatorio para nadie.
+    // PASO 2: ESCENARIO A - SILENCIO DE LA API (ELIMINADO)
+    // Dejamos que el motor procese. Al no haber políticas, asumirá la exigencia 
+    // como 'false' (por defecto de fábrica nadie está obligado).
     // =======================================================================
-    if (enforcementPolicies.length === 0) {
-      Logger.log("[DEBUG ID-010] ALERTA: La API no retorna datos para exigencia de 2SV.");
-      return {
-        name: this.name,
-        valorPrincipal: "empty.",
-        comentario010: "omitió datos (Estado de fábrica: No exigido).",
-        riesgo010: "",
-        score010: ""
-      };
-    }
 
     // =======================================================================
     // PASO 3: AISLAR A LOS ADMINISTRADORES DEL CENSO
@@ -81,8 +72,13 @@ class AdminTwoStepVerificationEnforcementStrategy extends ApiStrategy {
       // 2. Resolvemos cuál gana si tiene más de una asignada
       const politicaGanadora = PolicyReducerFactory.reduce(aplicables, "security.two_step_verification_enforcement");
 
+      const hasEnforcement = this._isCurrentlyEnforced(politicaGanadora);
+      
+      // LOG FORENSE: Mostrar cada admin y su estado de exigencia
+      Logger.log(`[DEBUG ID-010] Evaluando admin: ${admin.email || admin.id} | Políticas aplicables: ${aplicables.length} | Exigencia 2SV: ${hasEnforcement}`);
+
       // 3. Verificamos si la política ganadora efectivamente le obliga a usar 2SV hoy
-      if (this._isCurrentlyEnforced(politicaGanadora)) {
+      if (hasEnforcement) {
         adminsObligados++;
       }
     }
