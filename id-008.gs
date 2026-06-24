@@ -76,13 +76,13 @@ class TwoStepVerificationCounter extends ApiStrategy {
 
     if (porcentajeNum === 0) {
       riesgo = "Alto";
-      comentario = `Vulnerabilidad crítica. Ningún usuario (${usuariosCon2SV}/${totalUsuarios}) tiene activa la verificación en dos pasos. Las identidades dependen únicamente del esquema de contraseñas.`;
+      comentario = `Ningún usuario cuenta con verificación en dos pasos operativa. ${usuariosCon2SV}/${totalUsuarios}.`;
     } else if (porcentajeNum === 100) {
       riesgo = "Bajo";
-      comentario = `Cumplimiento total. El 100% de los usuarios (${usuariosCon2SV}/${totalUsuarios}) tienen la verificación en dos pasos operativa.`;
+      comentario = `El 100% de los usuarios de las identidades auditadas tienen la verificación en dos pasos (MFA) operativa. ${usuariosCon2SV}/${totalUsuarios}`;
     } else {
       riesgo = "Medio";
-      comentario = `Adopción fragmentada. El ${porcentajeNum}% de los usuarios (${usuariosCon2SV}/${totalUsuarios}) tiene 2SV activa.`;
+      comentario = `Adopción fragmentada. El ${porcentajeNum}% de los usuarios tiene el 2FA activo. ${usuariosCon2SV}/${totalUsuarios}.`;
     }
 
     return {
