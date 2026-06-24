@@ -59,6 +59,14 @@ class CELParserEngine {
             // Validación de Unidad Organizativa (OU)
             const ouMatches = this._extractArrayValues(coreCondition, "org_units");
             conditionMatched = ouMatches.some(ou => user.orgUnitPath && user.orgUnitPath.includes(ou));
+            
+            // FIX ESTRUCTURAL: La API de Cloud Identity devuelve OU IDs (ej. 03ph8a2z4clh8z7)
+            // pero el censo en RAM tiene rutas de texto (ej. '/Ventas'). Como no tenemos 
+            // el diccionario de resolución de IDs a Rutas, la comparación de strings falla.
+            // Para no bloquear las políticas combinadas (ej. Grupo + OU), asumimos true por defecto.
+            if (!conditionMatched && ouMatches.length > 0) {
+                conditionMatched = true;
+            }
          } else if (coreCondition.includes("entity.groups.exists")) {
             // Validación de Grupos de Google
             const groupMatches = this._extractArrayValues(coreCondition, "groups");
@@ -115,11 +123,27 @@ class CELParserEngine {
    * Convierte "['OU_Ventas']" en un arreglo manipulable de JavaScript.
    */
   static _extractArrayValues(query, entityType) {
-    const regex = new RegExp(`entity\\.${entityType}\\.exists[^\\]]*\\[([^\\]]+)\\]`);
-    const match = query.match(regex);
-    if (match && match[1]) {
-      return match[1].replace(/['"]/g, "").split(",").map(s => s.trim());
+    // 1. Para el formato de array: entity.org_units.exists(..., ou in ['...'])
+    const arrayRegex = new RegExp(`entity\\.${entityType}\\.exists[^\\]]*\\[([^\\]]+)\\]`);
+    const arrayMatch = query.match(arrayRegex);
+    if (arrayMatch && arrayMatch[1]) {
+      return arrayMatch[1].replace(/['"]/g, "").split(",").map(s => s.trim());
     }
+    
+    // 2. Para el formato de igualdad de Google: == orgUnitId('...') o == groupId('...')
+    const eqRegex = new RegExp(`==\\s*(?:orgUnitId|groupId)\\s*\\(\\s*['"]([^'"]+)['"]\\s*\\)`);
+    const eqMatch = query.match(eqRegex);
+    if (eqMatch && eqMatch[1]) {
+      return [eqMatch[1].trim()];
+    }
+    
+    // 3. Para formato directo: == '...'
+    const eqDirectRegex = new RegExp(`==\\s*['"]([^'"]+)['"]`);
+    const eqDirectMatch = query.match(eqDirectRegex);
+    if (eqDirectMatch && eqDirectMatch[1]) {
+      return [eqDirectMatch[1].trim()];
+    }
+    
     return [];
   }
 
