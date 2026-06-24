@@ -72,6 +72,7 @@ class PasswordReusePolicyStrategy extends ApiStrategy {
     }
 
     const totalUsuarios = usuariosPermitidos + usuariosBloqueados;
+    const porcentajePermitidos = totalUsuarios > 0 ? Math.round((usuariosPermitidos / totalUsuarios) * 100) : 0;
     const porcentajeBloqueados = totalUsuarios > 0 ? Math.round((usuariosBloqueados / totalUsuarios) * 100) : 0;
     
     // 5. ASIGNAR RIESGO Y CONSTRUIR RESULTADO
@@ -79,12 +80,10 @@ class PasswordReusePolicyStrategy extends ApiStrategy {
     let riesgo = isReuseAllowed ? "Alto" : "Bajo";
     
     let comentario;
-    if (passwordPolicies.length === 0) {
-      comentario = "La organización no tiene configuradas políticas personalizadas de contraseñas. Por defecto de fábrica, se permite la reutilización.";
-    } else if (isReuseAllowed) {
-      comentario = `Las políticas actuales permiten la reutilización de contraseñas en la raíz del dominio. Solo al ${porcentajeBloqueados}% de los usuarios se les prohíbe reutilizarlas mediante excepciones.`;
+    if (isReuseAllowed) {
+      comentario = `El ${porcentajePermitidos}% de los usuarios tiene permitido reutilizar contraseñas antiguas.`;
     } else {
-      comentario = `El ${porcentajeBloqueados}% de los usuarios tiene prohibida la reutilización de contraseñas antiguas.`;
+      comentario = `La reutilización de contraseñas se encuentra bloqueada desde la raíz. El ${porcentajeBloqueados}% de los usuarios tiene estrictamente prohibido reciclar claves antiguas.`;
     }
     
     Logger.log(`[ID-004] Métrica procesada. Riesgo: ${riesgo}. Bloqueado en: ${porcentajeBloqueados}% de usuarios.`);

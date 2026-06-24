@@ -190,7 +190,8 @@ function AuditoriasAppsExternas() {
       new ServiceAccountKeyAgeStrategy(gcpProjectId, gcpServiceAccount),
       new MarketplaceInstallPolicyStrategy(customerId),
       new AdminAppInstallEventStrategy(),
-      new MarketplaceAllowlistStrategy(customerId)
+      new MarketplaceAllowlistStrategy(customerId),
+      new AccessedAppsStrategy(customerId)
     ];
 
     // 2. Agregamos las estrategias al auditor
