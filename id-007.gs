@@ -43,7 +43,7 @@ class TwoStepVerificationEnrollmentPolicyStrategy extends ApiStrategy {
     if (mfaPolicies.length === 0) {
       respuestaConcreta = "Habilitado";
       riesgo007 = "Bajo";
-      comentario007 = "El enrolamiento de MFA está habilitado por defecto de fábrica. No existen políticas que lo bloqueen.";
+      comentario007 = "Los usuarios tienen habilitada la opción para inscribirse en la verificación en dos pasos (MFA).";
     } 
     // =======================================================================
     // PASO 3: EVALUAR LA POLÍTICA EFECTIVA DE LA RAÍZ
@@ -57,13 +57,13 @@ class TwoStepVerificationEnrollmentPolicyStrategy extends ApiStrategy {
       if (this._isEnrollmentAllowed(rootPolicy)) {
         respuestaConcreta = "Habilitado";
         riesgo007 = "Bajo";
-        comentario007 = "La política efectiva a nivel organizacional permite a los usuarios inscribirse en la verificación en dos pasos.";
+        comentario007 = "Los usuarios tienen habilitada la opción para inscribirse en la verificación en dos pasos (MFA).";
       } 
       // Si la ganadora dice false, significa que un admin prohibió usar MFA
       else {
         respuestaConcreta = "Deshabilitado";
         riesgo007 = "Alto";
-        comentario007 = "La política efectiva a nivel organizacional está configurada explícitamente para BLOQUEAR el enrolamiento en la verificación en dos pasos.";
+        comentario007 = "Los usuarios tienen bloqueada la capacidad de activar la verificación en dos pasos por sí mismos.";
       }
     }
 

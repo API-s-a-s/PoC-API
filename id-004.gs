@@ -59,12 +59,12 @@ class PasswordReusePolicyStrategy extends ApiStrategy {
     Logger.log(`[DEBUG ID-004] Iniciando escaneo de ${census.length} usuarios usando CELParserEngine para buscar excepciones...`);
 
     for (const user of census) {
-      // a) El motor CEL verifica SI LA REGLA APLICA al usuario (No lee allowReuse, lee el query)
       const aplicables = passwordPolicies.filter(p => CELParserEngine.evaluate(p, user));   
-      // b) El Reducer decide cuál regla gana si hay un conflicto
       const politicaGanadora = PolicyReducerFactory.reduce(aplicables, "security.password");
-      // c) Nuestra función _isReuseAllowed lee la variable allowReuse de la regla ganadora
-      if (this._isReuseAllowed(politicaGanadora)) {
+      // Corrección de herencia: Si hay política ganadora se evalúa, si no, hereda de la raíz.
+      const userAllowed = politicaGanadora ? this._isReuseAllowed(politicaGanadora) : isReuseAllowed;
+
+      if (userAllowed) {
         usuariosPermitidos++;
       } else {
         usuariosBloqueados++;
@@ -79,12 +79,9 @@ class PasswordReusePolicyStrategy extends ApiStrategy {
     // Permitir la reutilización es un riesgo de seguridad (Alto). Bloquearlo es seguro (Bajo).
     let riesgo = isReuseAllowed ? "Alto" : "Bajo";
     
-    let comentario;
-    if (isReuseAllowed) {
-      comentario = `El ${porcentajePermitidos}% de los usuarios tiene permitido reutilizar contraseñas antiguas.`;
-    } else {
-      comentario = `La reutilización de contraseñas se encuentra bloqueada desde la raíz. El ${porcentajeBloqueados}% de los usuarios tiene estrictamente prohibido reciclar claves antiguas.`;
-    }
+    let comentario = isReuseAllowed 
+      ? `La reutilización de contraseñas está permitida. El ${porcentajePermitidos}% de los usuarios puede reciclar claves antiguas.`
+      : `La reutilización de contraseñas está bloqueada desde la raíz. El ${porcentajeBloqueados}% de los usuarios tiene prohibido reciclar claves antiguas.`;
     
     Logger.log(`[ID-004] Métrica procesada. Riesgo: ${riesgo}. Bloqueado en: ${porcentajeBloqueados}% de usuarios.`);
 

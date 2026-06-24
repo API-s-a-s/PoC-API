@@ -14,8 +14,6 @@ class CELParserEngine {
 
   static evaluate(policy, user) {
     const q = (policy && policy.policyQuery && policy.policyQuery.query) ? policy.policyQuery.query : "";
-    
-    Logger.log(`[CEL DEBUG] Evaluando query: '${q}' para usuario ${user.email}`);
 
     // Si el query está vacío o es una regla global de cliente, aplica a todos por defecto
     if (q.trim() === "" || q.includes("customer==")) {

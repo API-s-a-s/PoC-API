@@ -44,14 +44,17 @@ class TwoStepVerificationCounter extends ApiStrategy {
     }
 
     // =======================================================================
-    // PASO 2: CÁLCULO DE ADOPCIÓN (TIEMPO REAL)
-    // Recorremos el censo y sumamos a quienes la Directory API marcó con 2SV
+    // PASO 2: CÁLCULO DE ADOPCIÓN (TIEMPO REAL) Y RECOLECCIÓN DE AFECTADOS
     // =======================================================================
     let usuariosCon2SV = 0;
+    let usuariosSin2SVList = []; // NUEVO: Arreglo para guardar los usuarios vulnerables
 
     for (const user of census) {
       if (user.isEnrolledIn2Sv === true) {
         usuariosCon2SV++;
+      } else {
+        // Guardamos el email de los que NO tienen activa la verificación en 2 pasos
+        usuariosSin2SVList.push(user.email || user.id);
       }
     }
 
@@ -59,6 +62,11 @@ class TwoStepVerificationCounter extends ApiStrategy {
     const estadoPrincipal = `${porcentajeNum}%`; // Imprimiremos el % en la celda principal
     
     Logger.log(`[ID-008] Censo procesado. Usuarios: ${totalUsuarios} | Con 2SV: ${usuariosCon2SV} | Adopción: ${porcentajeNum}%`);
+
+    // NUEVO: Imprimimos el log de los usuarios afectados para auditoría forense
+    if (usuariosSin2SVList.length > 0) {
+      Logger.log(`[ID-008] DETALLE: Usuarios SIN Verificación en Dos Pasos activa (Vulnerables): ${usuariosSin2SVList.join(", ")}`);
+    }
 
     // =======================================================================
     // PASO 3: ASIGNACIÓN DE RIESGOS Y CONSTRUCCIÓN DE SALIDA
