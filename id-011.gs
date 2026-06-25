@@ -34,6 +34,7 @@ class TrustedDevice2SVPolicyStrategy extends ApiStrategy {
     // =======================================================================
     const trustPolicies = policies.filter(p => p.setting && p.setting.type.includes("security.two_step_verification_device_trust"));
     Logger.log(`[ID-011] Políticas de Dispositivos de Confianza encontradas en memoria: ${trustPolicies.length}`);
+    Logger.log(`[ID-011] JSON de políticas obtenidas: ${JSON.stringify(trustPolicies, null, 2)}`);
 
     // =======================================================================
     // PASO 2: ESCENARIO A - SILENCIO DE LA API

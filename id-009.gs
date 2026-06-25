@@ -40,14 +40,7 @@ class TwoStepVerificationEnforcementPolicyStrategy extends ApiStrategy {
     // Si la API no envía datos, asumimos este estado predeterminado.
     // =======================================================================
     if (enforcementPolicies.length === 0) {
-      Logger.log("[DEBUG ID-009] ALERTA: La API no retorna datos para exigencia de 2SV.");
-      return {
-        name: this.name,
-        valorPrincipal: "empty.",
-        comentario009: "La API no devolvió políticas de enforcement (Silencio). El MFA es Opcional por defecto de Google.",
-        riesgo009: "Alto",
-        score009: this.calcularScoreDeRiesgo("Alto")
-      };
+      Logger.log("[DEBUG ID-009] AVISO: La API no retorna datos para exigencia de 2SV. Se evaluará adopción real (isEnrolledIn2Sv).");
     }
 
     // =======================================================================
@@ -86,11 +79,10 @@ class TwoStepVerificationEnforcementPolicyStrategy extends ApiStrategy {
     Logger.log(`[ID-009] Evaluando la exigencia de 2SV para ${totalRegulares} Usuario(s) Regular(es).`);
 
     // =======================================================================
-    // PASO 5: CALCULAR PORCENTAJE DE OBLIGATORIEDAD (CENSO REGULAR)
+    // PASO 5: CALCULAR PORCENTAJE DE OBLIGATORIEDAD Y PROTECCIÓN REAL
     // Usamos el motor CEL para cruzar las políticas contra los usuarios
     // =======================================================================
-    let usuariosObligados = 0;
-    let usuariosOpcionales = 0;
+    let usuariosProtegidos = 0;
     
     for (const user of usuariosRegulares) {
       const aplicables = enforcementPolicies.filter(p => CELParserEngine.evaluate(p, user));
@@ -98,38 +90,44 @@ class TwoStepVerificationEnforcementPolicyStrategy extends ApiStrategy {
       // El motor usará el _maxReducer para decidir qué regla prevalece si hay conflicto
       const politicaGanadora = PolicyReducerFactory.reduce(aplicables, "security.two_step_verification_enforcement");
 
-      if (this._isEnforced(politicaGanadora)) {
-        usuariosObligados++;
-      } else {
-        usuariosOpcionales++;
+      const hasEnforcement = this._isEnforced(politicaGanadora);
+      const isEnrolled = user.isEnrolledIn2Sv === true;
+
+      if (hasEnforcement || isEnrolled) {
+        usuariosProtegidos++;
       }
     }
 
-    // Calculamos el % de USUARIOS REGULARES a los que se les EXIGE usar el 2SV
-    const porcentajeObligados = Math.round((usuariosObligados / totalRegulares) * 100);
+    // Calculamos el % de USUARIOS REGULARES protegidos
+    const porcentajeObligados = Math.round((usuariosProtegidos / totalRegulares) * 100);
     
     // =======================================================================
     // PASO 6: ASIGNAR RIESGO Y CONSTRUIR RESULTADO
-    // Si es obligatorio a nivel raíz el riesgo es Bajo, de lo contrario Alto.
-    // El comentario solo mostrará el porcentaje exacto de cobertura.
     // =======================================================================
     let riesgo009, comentario009;
+    let respuestaConcreta;
+
     if (porcentajeObligados === 100) {
+       respuestaConcreta = `Protegido (${porcentajeObligados}%)`;
        riesgo009 = "Bajo";
-       comentario009 = `Cumplimiento total. El 100% de los usuarios regulares (${usuariosObligados}/${totalRegulares}) están obligados a utilizar la verificación en dos pasos (MFA).`;
+       comentario009 = `Cumplimiento total. El 100% de los usuarios regulares (${usuariosProtegidos}/${totalRegulares}) están obligados a utilizar o han activado proactivamente la verificación en dos pasos (MFA).`;
     } else if (porcentajeObligados === 0) {
+       respuestaConcreta = enforcementPolicies.length === 0 ? "Alerta API (Vacío)" : `Vulnerable (${porcentajeObligados}%)`;
        riesgo009 = "Alto";
-       comentario009 = `Riesgo Crítico: Ningún usuario regular (0/${totalRegulares}) está obligado a usar la verificación en dos pasos.`;
+       comentario009 = enforcementPolicies.length === 0
+         ? `La API no devolvió políticas de enforcement. Ningún usuario regular (0/${totalRegulares}) está obligado ni tiene activa la verificación en dos pasos.`
+         : `Riesgo Crítico: Ningún usuario regular (0/${totalRegulares}) está protegido por exigencia o adopción proactiva de MFA.`;
     } else {
+       respuestaConcreta = `Parcial (${porcentajeObligados}%)`;
        riesgo009 = "Alto";
-       comentario009 = `Vulnerabilidad de Brecha: Adopción fragmentada. Solo el ${porcentajeObligados}% de los usuarios regulares (${usuariosObligados}/${totalRegulares}) tiene exigencia estricta de MFA.`;
+       comentario009 = `Vulnerabilidad de Brecha: Adopción fragmentada. Solo el ${porcentajeObligados}% de los usuarios regulares (${usuariosProtegidos}/${totalRegulares}) cuenta con exigencia o adopción activa de MFA.`;
     }
     
-    Logger.log(`[ID-009] Métrica procesada. Riesgo: ${riesgo009}. Obligatorio para: ${porcentajeObligados}% de usuarios regulares.`);
+    Logger.log(`[ID-009] Métrica procesada. Riesgo: ${riesgo009}. Protegidos: ${porcentajeObligados}% de usuarios regulares.`);
 
     return {
       name: this.name,
-      valorPrincipal: `${estadoPrincipal} (${porcentajeObligados}%)`, 
+      valorPrincipal: respuestaConcreta, 
       comentario009: comentario009,
       riesgo009: riesgo009,
       score009: this.calcularScoreDeRiesgo(riesgo009)

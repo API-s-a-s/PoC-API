@@ -38,13 +38,7 @@ class AdminTwoStepVerificationEnforcementStrategy extends ApiStrategy {
     // PASO 2: ESCENARIO A - SILENCIO DE LA API
     // =======================================================================
     if (enforcementPolicies.length === 0) {
-      return {
-        name: this.name,
-        valorPrincipal: "API vacío",
-        comentario010: "La API no retorna políticas (Estado de fábrica). Ningún administrador (0%) está obligado a usar la verificación en dos pasos.",
-        riesgo010: "Alto",
-        score010: this.calcularScoreDeRiesgo("Alto")
-      };
+      Logger.log("[ID-010] AVISO: La API no retorna políticas de enforcement. Se evaluará la adopción real (isEnrolledIn2Sv).");
     }
 
     // =======================================================================
@@ -70,7 +64,7 @@ class AdminTwoStepVerificationEnforcementStrategy extends ApiStrategy {
     // =======================================================================
     // PASO 4: EVALUACIÓN FORENSE POR USUARIO ADMINISTRADOR
     // =======================================================================
-    let adminsObligados = 0;
+    let adminsProtegidos = 0;
     
     for (const admin of administradores) {
       // 1. Vemos qué políticas aplican específicamente a ESTE administrador
@@ -80,17 +74,18 @@ class AdminTwoStepVerificationEnforcementStrategy extends ApiStrategy {
       const politicaGanadora = PolicyReducerFactory.reduce(aplicables, "security.two_step_verification_enforcement");
 
       const hasEnforcement = this._isCurrentlyEnforced(politicaGanadora);
+      const isEnrolled = admin.isEnrolledIn2Sv === true;
       
       // LOG FORENSE: Mostrar cada admin y su estado de exigencia
-      Logger.log(`[DEBUG ID-010] Evaluando admin: ${admin.email || admin.id} | Políticas aplicables: ${aplicables.length} | Exigencia 2SV: ${hasEnforcement}`);
+      Logger.log(`[DEBUG ID-010] Evaluando admin: ${admin.email || admin.id} | Exigencia 2SV: ${hasEnforcement} | Adopción Real: ${isEnrolled}`);
 
-      // 3. Verificamos si la política ganadora efectivamente le obliga a usar 2SV hoy
-      if (hasEnforcement) {
-        adminsObligados++;
+      // 3. Verificamos si la política ganadora le obliga a usar 2SV hoy o si ya lo tiene activo
+      if (hasEnforcement || isEnrolled) {
+        adminsProtegidos++;
       }
     }
 
-    const porcentajeAdmins = Math.round((adminsObligados / totalAdmins) * 100);
+    const porcentajeAdmins = Math.round((adminsProtegidos / totalAdmins) * 100);
 
     // =======================================================================
     // PASO 5: ASIGNAR RIESGO Y CONSTRUIR RESULTADO
@@ -100,17 +95,19 @@ class AdminTwoStepVerificationEnforcementStrategy extends ApiStrategy {
     let riesgo010, comentario010;
 
     if (porcentajeAdmins === 100) {
-      respuestaConcreta = `Obligatorio (${porcentajeAdmins}%)`;
+      respuestaConcreta = `Protegido (${porcentajeAdmins}%)`;
       riesgo010 = "Bajo";
-      comentario010 = `Cumplimiento total. El 100% de los administradores (${adminsObligados}/${totalAdmins}) tienen exigencia estricta de verificación en dos pasos.`;
+      comentario010 = `Cumplimiento total. El 100% de los administradores (${adminsProtegidos}/${totalAdmins}) tienen exigencia estricta o han activado proactivamente la verificación en dos pasos.`;
     } else if (porcentajeAdmins === 0) {
-      respuestaConcreta = `Opcional (${porcentajeAdmins}%)`;
+      respuestaConcreta = enforcementPolicies.length === 0 ? "Alerta API (Vacío)" : `Vulnerable (${porcentajeAdmins}%)`;
       riesgo010 = "Alto";
-      comentario010 = `Riesgo Crítico: Ningún administrador (0/${totalAdmins}) está obligado a usar la verificación en dos pasos.`;
+      comentario010 = enforcementPolicies.length === 0 
+        ? `La API no retorna políticas (Estado de fábrica). Ningún administrador (0/${totalAdmins}) está obligado ni usa la verificación en dos pasos.`
+        : `Riesgo Crítico: Ningún administrador (0/${totalAdmins}) está obligado ni tiene activa la verificación en dos pasos.`;
     } else {
       respuestaConcreta = `Parcial (${porcentajeAdmins}%)`;
       riesgo010 = "Alto";
-      comentario010 = `Brecha de Seguridad Crítica: Adopción fragmentada. Solo el ${porcentajeAdmins}% de los administradores (${adminsObligados}/${totalAdmins}) tiene exigencia de verificación en dos pasos.`;
+      comentario010 = `Brecha de Seguridad Crítica: Adopción fragmentada. Solo el ${porcentajeAdmins}% de los administradores (${adminsProtegidos}/${totalAdmins}) cuenta con verificación en dos pasos activa o exigida.`;
     }
 
     Logger.log(`[ID-010] Métrica procesada. Resultado: ${respuestaConcreta} | Riesgo: ${riesgo010} | Admins Protegidos: ${porcentajeAdmins}%`);
