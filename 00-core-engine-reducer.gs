@@ -22,7 +22,7 @@ class CELParserEngine {
           // Las políticas de seguridad como 2SV aplican también a Cloud Identity Free (101031).
           // Fallback open: Si no hay array de licencias, lo dejamos pasar para no romper el motor.
           const hasWorkspaceLicense = !user.licenses || user.licenses.length === 0 || user.licenses.some(sku => 
-              sku.includes('/product/Google-Apps/') || sku.includes('/product/101031')
+              sku.includes('/product/Google-Apps') || sku.includes('/product/10103') || sku.includes('CloudIdentity')
           );
           
           if (!hasWorkspaceLicense) {
@@ -73,7 +73,14 @@ class CELParserEngine {
          // 3. INVERSIÓN UNARIA (Operador NOT !)
          // Detecta si la condición viene negada para tratarla como una excepción.
          let isNegated = condition.startsWith("!");
-         let coreCondition = isNegated ? condition.substring(1).trim() : condition;
+         let coreCondition = condition;
+         if (isNegated) {
+             coreCondition = condition.substring(1).trim();
+             // Si tras quitar el '!' queda envuelto en paréntesis, quitar los externos
+             if (coreCondition.startsWith("(") && coreCondition.endsWith(")")) {
+                 coreCondition = coreCondition.substring(1, coreCondition.length - 1).trim();
+             }
+         }
          let conditionMatched = false;
 
          // --- EVALUACIÓN SEMÁNTICA EN RAM ---
@@ -161,7 +168,7 @@ class CELParserEngine {
    */
   static _extractArrayValues(query, entityType) {
     // 1. Para el formato de array: entity.org_units.exists(..., ou in ['...'])
-    const arrayRegex = new RegExp(`entity\\.${entityType}\\.exists[^\\]]*\\[([^\\]]+)\\]`);
+    const arrayRegex = new RegExp(`entity\\.${entityType}\\.exists.*?\\[([^\\]]+)\\]`);
     const arrayMatch = query.match(arrayRegex);
     if (arrayMatch && arrayMatch[1]) {
       return arrayMatch[1].replace(/['"]/g, "").split(",").map(s => s.trim());
@@ -189,7 +196,7 @@ class CELParserEngine {
    */
   static _extractLicenses(query) {
     // Si usa el formato de array: license in ['/product/...']
-    const arrayRegex = /entity\.licenses\.exists[^\\]]*\[([^\]]+)\]/;
+    const arrayRegex = /entity\.licenses\.exists.*?\[([^\]]+)\]/;
     const arrayMatch = query.match(arrayRegex);
     if (arrayMatch && arrayMatch[1]) {
        return arrayMatch[1].replace(/['"]/g, "").split(",").map(s => s.trim());
