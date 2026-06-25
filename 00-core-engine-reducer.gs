@@ -53,7 +53,8 @@ class CELParserEngine {
 
     // Advertencia QA: si después de la sanitización externa quedan paréntesis anidados,
     // el split lineal no puede garantizar la precedencia lógica correcta.
-    if (sanitizedQ.includes("(") || sanitizedQ.includes(")")) {
+    // Omitimos la advertencia para reglas con "exists(" que usan funciones de forma estándar.
+    if ((sanitizedQ.includes("(") || sanitizedQ.includes(")")) && !sanitizedQ.includes("exists(")) {
       Logger.log(`[WARN] Expresión CEL compleja no soportada al 100%: '${sanitizedQ}'. El parseo con split puede alterar la precedencia lógica.`);
     }
 

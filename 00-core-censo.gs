@@ -51,6 +51,7 @@ class CensusStateWrapper {
 
     this._chunkAndSave(censoCompleto);
     this._saveOuMap(ouMap);
+    this._currentOuMap = ouMap; // Mantener en memoria RAM para esta ejecución
     Logger.log(`[DEBUG CENSO] Almacenado efímeramente: ${censoCompleto.length} usuarios, ${Object.keys(ouMap).length} OUs resueltas.`);
   }
 
@@ -165,9 +166,10 @@ class CensusStateWrapper {
    * Recupera el diccionario OU ID → OU Path desde la caché.
    * @return {Object|null} Mapa { ouId: ouPath } o null si no hay datos.
    */
-  getOuMap() {
-    const raw = this.cache.get(this.OU_MAP_KEY);
-    if (!raw) return {};
+   getOuMap() {
+     if (this._currentOuMap) return this._currentOuMap; // Retornar desde RAM si ya se construyó en esta ejecución
+     const raw = this.cache.get(this.OU_MAP_KEY);
+     if (!raw) return {};
     try {
       return JSON.parse(raw);
     } catch (e) {
