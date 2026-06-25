@@ -16,6 +16,8 @@ function AuditoriaIdentidadIdentificacion() {
     const censoWrapper = new CensusStateWrapper();
     censoWrapper.buildAndStoreCensus(auth, customerId);
     const censo = censoWrapper.getCensus();
+    // Inyectar diccionario OU ID → Path al motor CEL para resolución de OUs
+    CELParserEngine.ouIdToPathMap = censoWrapper.getOuMap();
     const policyQuery = new GlobalPolicyExtractor(auth, customerId);
     const politicas = policyQuery.fetchTree();
     const globalContext = {
@@ -49,7 +51,13 @@ function AuditoriaIdentidadIdentificacion() {
       new DeprovisioningAuditStrategy(), //30
       new SlaOffboardingAuditStrategy(), //31
       new SecurityAlertsAuditStrategy(), //32
-      new GroupExposureAuditStrategy(authHeader),//33                 
+      new GroupExposureAuditStrategy(authHeader),//33
+      
+      // Integrando estrategias previamente no llamadas
+      new PostSsoLoginPolicyStrategy(customerId),
+      new AdvancedProtectionPolicyStrategy(customerId),
+      new AdvancedProtectionPolicyCodesStrategy(customerId),
+      
       /**
       new AdvancedProtectionPolicyStrategy(customerId), //24      
       new EmployeeIdStrategy(), //22
@@ -90,6 +98,8 @@ function AuditoriaAdministracion() {
     const censoWrapper = new CensusStateWrapper();
     censoWrapper.buildAndStoreCensus(auth, customerId);
     const censo = censoWrapper.getCensus();
+    // Inyectar diccionario OU ID → Path al motor CEL para resolución de OUs
+    CELParserEngine.ouIdToPathMap = censoWrapper.getOuMap();
     
     const policyQuery = new GlobalPolicyExtractor(auth, customerId);
     const politicas = policyQuery.fetchTree();
@@ -168,6 +178,8 @@ function AuditoriasAppsExternas() {
     const censoWrapper = new CensusStateWrapper();
     censoWrapper.buildAndStoreCensus(auth, customerId);
     const censo = censoWrapper.getCensus();
+    // Inyectar diccionario OU ID → Path al motor CEL para resolución de OUs
+    CELParserEngine.ouIdToPathMap = censoWrapper.getOuMap();
     
     const policyQuery = new GlobalPolicyExtractor(auth, customerId);
     const politicas = policyQuery.fetchTree();
@@ -243,6 +255,8 @@ function AuditoriasEmail() {
     const censoWrapper = new CensusStateWrapper();
     censoWrapper.buildAndStoreCensus(auth, customerId);
     const censo = censoWrapper.getCensus();
+    // Inyectar diccionario OU ID → Path al motor CEL para resolución de OUs
+    CELParserEngine.ouIdToPathMap = censoWrapper.getOuMap();
     
     const policyQuery = new GlobalPolicyExtractor(auth, customerId);
     const politicas = policyQuery.fetchTree();
@@ -345,6 +359,8 @@ function AuditoriaDrive() {
     const censoWrapper = new CensusStateWrapper();
     censoWrapper.buildAndStoreCensus(auth, customerId);
     const censo = censoWrapper.getCensus();
+    // Inyectar diccionario OU ID → Path al motor CEL para resolución de OUs
+    CELParserEngine.ouIdToPathMap = censoWrapper.getOuMap();
     
     const policyQuery = new GlobalPolicyExtractor(auth, customerId);
     const politicas = policyQuery.fetchTree();
