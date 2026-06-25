@@ -35,10 +35,17 @@ class AdminTwoStepVerificationEnforcementStrategy extends ApiStrategy {
     Logger.log(`[ID-010] Políticas de Exigencia MFA encontradas en memoria: ${enforcementPolicies.length}`);
 
     // =======================================================================
-    // PASO 2: ESCENARIO A - SILENCIO DE LA API (ELIMINADO)
-    // Dejamos que el motor procese. Al no haber políticas, asumirá la exigencia 
-    // como 'false' (por defecto de fábrica nadie está obligado).
+    // PASO 2: ESCENARIO A - SILENCIO DE LA API
     // =======================================================================
+    if (enforcementPolicies.length === 0) {
+      return {
+        name: this.name,
+        valorPrincipal: "API vacío",
+        comentario010: "La API no retorna políticas (Estado de fábrica). Ningún administrador (0%) está obligado a usar la verificación en dos pasos.",
+        riesgo010: "Alto",
+        score010: this.calcularScoreDeRiesgo("Alto")
+      };
+    }
 
     // =======================================================================
     // PASO 3: AISLAR A LOS ADMINISTRADORES DEL CENSO
@@ -93,17 +100,17 @@ class AdminTwoStepVerificationEnforcementStrategy extends ApiStrategy {
     let riesgo010, comentario010;
 
     if (porcentajeAdmins === 100) {
-      respuestaConcreta = "Habilitado";
+      respuestaConcreta = `Obligatorio (${porcentajeAdmins}%)`;
       riesgo010 = "Bajo";
-      comentario010 = `El 100% de los administradores (${adminsObligados}/${totalAdmins}) tienen exigencia estricta de verificación en dos pasos.`;
+      comentario010 = `Cumplimiento total. El 100% de los administradores (${adminsObligados}/${totalAdmins}) tienen exigencia estricta de verificación en dos pasos.`;
     } else if (porcentajeAdmins === 0) {
-      respuestaConcreta = "Deshabilitado";
+      respuestaConcreta = `Opcional (${porcentajeAdmins}%)`;
       riesgo010 = "Alto";
-      comentario010 = `Ningún administrador (0/${totalAdmins}) está obligado a usar la verificación en dos pasos.`;
+      comentario010 = `Riesgo Crítico: Ningún administrador (0/${totalAdmins}) está obligado a usar la verificación en dos pasos.`;
     } else {
-      respuestaConcreta = "Deshabilitado"; // O "Parcial" dependiendo de tu convención
-      riesgo010 = "Alto"; // Sigue siendo ALTO porque hay admins expuestos
-      comentario010 = `Vulnerabilidad detectada. Solo el ${porcentajeAdmins}% de los administradores (${adminsObligados}/${totalAdmins}) tienen exigencia de verificación en dos pasos.`;
+      respuestaConcreta = `Parcial (${porcentajeAdmins}%)`;
+      riesgo010 = "Alto";
+      comentario010 = `Brecha de Seguridad Crítica: Adopción fragmentada. Solo el ${porcentajeAdmins}% de los administradores (${adminsObligados}/${totalAdmins}) tiene exigencia de verificación en dos pasos.`;
     }
 
     Logger.log(`[ID-010] Métrica procesada. Resultado: ${respuestaConcreta} | Riesgo: ${riesgo010} | Admins Protegidos: ${porcentajeAdmins}%`);

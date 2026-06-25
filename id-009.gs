@@ -44,9 +44,9 @@ class TwoStepVerificationEnforcementPolicyStrategy extends ApiStrategy {
       return {
         name: this.name,
         valorPrincipal: "empty.",
-        comentario009: "omitió datos.",
-        riesgo009: "",
-        score009: ""
+        comentario009: "La API no devolvió políticas de enforcement (Silencio). El MFA es Opcional por defecto de Google.",
+        riesgo009: "Alto",
+        score009: this.calcularScoreDeRiesgo("Alto")
       };
     }
 
@@ -62,7 +62,7 @@ class TwoStepVerificationEnforcementPolicyStrategy extends ApiStrategy {
       isRootEnforced = this._isEnforced(rootPolicy);
     }
 
-    const estadoPrincipal = isRootEnforced ? "Obligatorio" : "Habilitad0";
+    const estadoPrincipal = isRootEnforced ? "Obligatorio" : "Opcional";
     Logger.log(`[ID-009] Raíz de la Org: Exigencia de 2SV = ${estadoPrincipal}`);
 
     // =======================================================================
@@ -113,17 +113,26 @@ class TwoStepVerificationEnforcementPolicyStrategy extends ApiStrategy {
     // Si es obligatorio a nivel raíz el riesgo es Bajo, de lo contrario Alto.
     // El comentario solo mostrará el porcentaje exacto de cobertura.
     // =======================================================================
-    let riesgo = isRootEnforced ? "Bajo" : "Alto";
-    let comentario = `${porcentajeObligados}%`; 
+    let riesgo009, comentario009;
+    if (porcentajeObligados === 100) {
+       riesgo009 = "Bajo";
+       comentario009 = `Cumplimiento total. El 100% de los usuarios regulares (${usuariosObligados}/${totalRegulares}) están obligados a utilizar la verificación en dos pasos (MFA).`;
+    } else if (porcentajeObligados === 0) {
+       riesgo009 = "Alto";
+       comentario009 = `Riesgo Crítico: Ningún usuario regular (0/${totalRegulares}) está obligado a usar la verificación en dos pasos.`;
+    } else {
+       riesgo009 = "Alto";
+       comentario009 = `Vulnerabilidad de Brecha: Adopción fragmentada. Solo el ${porcentajeObligados}% de los usuarios regulares (${usuariosObligados}/${totalRegulares}) tiene exigencia estricta de MFA.`;
+    }
     
-    Logger.log(`[ID-009] Métrica procesada. Riesgo: ${riesgo}. Obligatorio para: ${porcentajeObligados}% de usuarios regulares.`);
+    Logger.log(`[ID-009] Métrica procesada. Riesgo: ${riesgo009}. Obligatorio para: ${porcentajeObligados}% de usuarios regulares.`);
 
     return {
       name: this.name,
-      valorPrincipal: estadoPrincipal, 
-      comentario009: comentario,
-      riesgo009: riesgo,
-      score009: this.calcularScoreDeRiesgo(riesgo)
+      valorPrincipal: `${estadoPrincipal} (${porcentajeObligados}%)`, 
+      comentario009: comentario009,
+      riesgo009: riesgo009,
+      score009: this.calcularScoreDeRiesgo(riesgo009)
     };
   }
 
